@@ -1,0 +1,26 @@
+# Local PostgreSQL for development and tests.
+#   npm run db:up    → start
+#   npm run db:down  → stop (data is kept in the named volume)
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: manuver-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: manuver
+      POSTGRES_PASSWORD: manuver_dev_password
+      POSTGRES_DB: manuver
+    ports:
+      - "5432:5432"
+    volumes:
+      - manuver-db-data:/var/lib/postgresql/data
+      # Creates the separate test database on first start.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manuver -d manuver"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  manuver-db-data:

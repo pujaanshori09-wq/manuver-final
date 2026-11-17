@@ -1,0 +1,491 @@
+// Manuver data model. One source of truth for every table.
+// Rules that used to live in Supabase RLS/RPCs are enforced in the service layer
+// (src/modules/*) inside Prisma transactions.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Accounts & auth
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Null for accounts that signed up with a phone number only.
+  email        String?  @unique
+  /// bcrypt hash. Null for accounts that only sign in with Google or a phone number.
+  passwordHash String?
+  googleId     String?  @unique
+  emailVerified Boolean @default(false)
+  /// E.164, e.g. +14155550123. Set once the number is verified with an OTP.
+  phone        String?  @unique
+  phoneVerifiedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile        Profile?
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordReset[]
+  photos         ProfilePhoto[]
+  sports         UserSport[]
+  prompts        ProfilePrompt[]
+  swipesMade     Swipe[]        @relation("SwipesMade")
+  swipesReceived Swipe[]        @relation("SwipesReceived")
+  matchesA       Match[]        @relation("MatchUserA")
+  matchesB       Match[]        @relation("MatchUserB")
+  messages       Message[]
+  blocksMade     Block[]        @relation("BlocksMade")
+  blocksReceived Block[]        @relation("BlocksReceived")
+  reportsMade    Report[]       @relation("ReportsMade")
+  reportsAgainst Report[]       @relation("ReportsAgainst")
+  sessions       OpenSession[]
+  sessionJoins   SessionParticipant[]
+  sosSlots       EmergencySlot[]
+  sosClaims      EmergencySlotClaim[]
+  events         Event[]
+  eventRegs      EventRegistration[]
+
+  @@map("users")
+}
+
+/// Refresh tokens are stored hashed and rotated on every refresh.
+/// A reused (already rotated) token revokes its whole family.
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  familyId   String    @db.Uuid
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/// One row per OTP request (rate limiting + the code itself when the "console" provider is used).
+model PhoneOtp {
+  id         String    @id @default(uuid()) @db.Uuid
+  phone      String
+  /// HMAC of the code. Null when the provider (Twilio Verify) keeps the code.
+  codeHash   String?
+  ip         String?
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+  @@map("phone_otps")
+}
+
+/// Short-lived one-time code that hands a server-side OAuth sign-in back to the app.
+model OAuthHandoff {
+  id        String    @id @default(uuid()) @db.Uuid
+  codeHash  String    @unique
+  userId    String    @db.Uuid
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("oauth_handoffs")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum GenderPreference {
+  ALL
+  MEN
+  WOMEN
+}
+
+/// UI language chosen during onboarding; restored on any device the user signs in on.
+enum AppLanguage {
+  EN
+  ID
+  ZH
+  ES
+  HI
+  PT
+  RU
+  JA
+  DE
+  FR
+  KO
+  VI
+  TH
+  MS
+}
+
+model Profile {
+  userId          String    @id @db.Uuid
+  name            String    @default("")
+  language        AppLanguage?
+  birthDate       DateTime? @db.Date
+  gender          Gender?
+  bio             String?
+  lookingFor      String?
+  skillLevel      String?
+  job             String?
+  education       String?
+  /// City / area shown publicly (e.g. "Jakarta Selatan").
+  city            String?
+  heightCm        Int?
+  sportRole       String?
+  preferredTime   String?
+  playFrequency   String?
+  homeVenue       String?
+  workoutStyle    String?
+  availability    String[]  @default([])
+
+  // Location: private. Only distance is ever exposed to other users.
+  latitude        Float?
+  longitude       Float?
+  locationUpdatedAt DateTime?
+
+  // Discovery preferences
+  ageMin          Int       @default(18)
+  ageMax          Int       @default(50)
+  genderPreference GenderPreference @default(ALL)
+  maxDistanceKm   Int       @default(25)
+  ghostMode       Boolean   @default(false)
+
+  // Onboarding & moderation (server-controlled)
+  termsAcceptedAt     DateTime?
+  onboardingCompletedAt DateTime?
+  flaggedForReview    Boolean   @default(false)
+
+  pushToken       String?
+  lastActiveAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([latitude, longitude])
+  @@index([lastActiveAt])
+  @@map("profiles")
+}
+
+model ProfilePhoto {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  /// Storage key (e.g. "users/<id>/<file>.jpg"); the URL is built by the storage layer.
+  storageKey String
+  position  Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, position])
+  @@map("profile_photos")
+}
+
+/// The single source of truth for a user's sports (fixes the old hobi vs user_sports split).
+model UserSport {
+  userId          String   @db.Uuid
+  sportId         String
+  experienceLevel String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sportId])
+  @@index([sportId])
+  @@map("user_sports")
+}
+
+model PromptQuestion {
+  id        String   @id @default(uuid()) @db.Uuid
+  textEn    String
+  textId    String
+  category  String?
+  isActive  Boolean  @default(true)
+
+  answers ProfilePrompt[]
+
+  @@map("prompt_questions")
+}
+
+model ProfilePrompt {
+  userId     String   @db.Uuid
+  questionId String   @db.Uuid
+  answer     String   @db.VarChar(150)
+  position   Int
+  createdAt  DateTime @default(now())
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question PromptQuestion @relation(fields: [questionId], references: [id])
+
+  @@id([userId, questionId])
+  @@unique([userId, position])
+  @@map("profile_prompts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discovery, matching, chat
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SwipeAction {
+  LIKE
+  PASS
+  SUPER
+}
+
+model Swipe {
+  userId     String      @db.Uuid
+  targetId   String      @db.Uuid
+  action     SwipeAction
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  user   User @relation("SwipesMade", fields: [userId], references: [id], onDelete: Cascade)
+  target User @relation("SwipesReceived", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([userId, targetId])
+  @@index([targetId, action])
+  @@map("swipes")
+}
+
+/// userAId < userBId (sorted) so a pair can only ever have one match.
+model Match {
+  id        String   @id @default(uuid()) @db.Uuid
+  userAId   String   @db.Uuid
+  userBId   String   @db.Uuid
+  createdAt DateTime @default(now())
+  lastMessageAt DateTime?
+
+  userA    User      @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User      @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+  @@map("matches")
+}
+
+enum MessageType {
+  TEXT
+  SPARING_INVITE
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model Message {
+  id        String       @id @default(uuid()) @db.Uuid
+  matchId   String       @db.Uuid
+  senderId  String       @db.Uuid
+  type      MessageType  @default(TEXT)
+  content   String
+  /// Sparing invite details (sport, venueName, scheduledAt, note).
+  invite    Json?
+  inviteStatus InviteStatus?
+  respondedAt  DateTime?
+  /// Client-generated id so retries never create duplicates.
+  clientId  String?      @db.Uuid
+  readAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender User  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, clientId])
+  @@index([matchId, createdAt])
+  @@map("messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safety
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Block {
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+model Report {
+  id         String   @id @default(uuid()) @db.Uuid
+  reporterId String   @db.Uuid
+  reportedId String   @db.Uuid
+  reason     String   @db.VarChar(200)
+  details    String?  @db.VarChar(2000)
+  createdAt  DateTime @default(now())
+
+  reporter User @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: Cascade)
+
+  @@index([reportedId, createdAt])
+  @@map("reports")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Open sparring sessions, SOS, events
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SessionStatus {
+  OPEN
+  FULL
+  CANCELLED
+  COMPLETED
+}
+
+model OpenSession {
+  id          String        @id @default(uuid()) @db.Uuid
+  creatorId   String        @db.Uuid
+  sport       String
+  title       String
+  venueName   String
+  scheduledAt DateTime
+  slotsTotal  Int
+  genderPref  GenderPreference @default(ALL)
+  skillNote   String?
+  status      SessionStatus @default(OPEN)
+  createdAt   DateTime      @default(now())
+
+  creator      User                 @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  participants SessionParticipant[]
+
+  @@index([status, scheduledAt])
+  @@map("open_sessions")
+}
+
+model SessionParticipant {
+  sessionId String   @db.Uuid
+  userId    String   @db.Uuid
+  joinedAt  DateTime @default(now())
+
+  session OpenSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, userId])
+  @@map("session_participants")
+}
+
+enum SosStatus {
+  ACTIVE
+  FILLED
+  CANCELLED
+}
+
+model EmergencySlot {
+  id           String    @id @default(uuid()) @db.Uuid
+  creatorId    String    @db.Uuid
+  sport        String
+  venueName    String
+  playTime     DateTime
+  expiresAt    DateTime
+  slotsNeeded  Int
+  feePerPerson Int       @default(0)
+  /// Private: only returned to someone who successfully claims a spot.
+  contactWa    String
+  note         String?
+  status       SosStatus @default(ACTIVE)
+  createdAt    DateTime  @default(now())
+
+  creator User                 @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  claims  EmergencySlotClaim[]
+
+  @@index([status, expiresAt])
+  @@map("emergency_slots")
+}
+
+model EmergencySlotClaim {
+  slotId    String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  slot EmergencySlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([slotId, userId])
+  @@map("emergency_slot_claims")
+}
+
+enum EventStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Event {
+  id          String      @id @default(uuid()) @db.Uuid
+  creatorId   String      @db.Uuid
+  title       String
+  organizer   String
+  type        String
+  category    String
+  dateText    String
+  location    String
+  city        String
+  priceText   String?
+  quota       Int?
+  imageUrl    String?
+  isFeatured  Boolean     @default(false)
+  /// New events start PENDING; only the server/admin can approve.
+  status      EventStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+
+  creator       User                @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  registrations EventRegistration[]
+
+  @@index([status, createdAt])
+  @@map("events")
+}
+
+model EventRegistration {
+  eventId   String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@map("event_registrations")
+}
