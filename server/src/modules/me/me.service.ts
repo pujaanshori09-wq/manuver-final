@@ -102,12 +102,15 @@ export async function updateProfile(userId: string, patch: z.infer<typeof Profil
   return getMe(userId);
 }
 
+/** Rows from one createMany share a timestamp; 1 ms steps keep the user's order (sports are read by createdAt). */
+const inOrder = (i: number) => new Date(Date.now() + i);
+
 export async function replaceSports(userId: string, sports: z.infer<typeof SportsBody>['sports']) {
   const unique = [...new Map(sports.map((s) => [s.sportId.toLowerCase(), s])).values()];
   await prisma.$transaction([
     prisma.userSport.deleteMany({ where: { userId } }),
     prisma.userSport.createMany({
-      data: unique.map((s) => ({ userId, sportId: s.sportId.toLowerCase(), experienceLevel: s.experienceLevel ?? null })),
+      data: unique.map((s, i) => ({ userId, sportId: s.sportId.toLowerCase(), experienceLevel: s.experienceLevel ?? null, createdAt: inOrder(i) })),
     }),
   ]);
   return getMe(userId);
@@ -144,7 +147,7 @@ export async function completeOnboarding(userId: string, input: z.infer<typeof O
     }),
     prisma.userSport.deleteMany({ where: { userId } }),
     prisma.userSport.createMany({
-      data: sports.map((s) => ({ userId, sportId: s.sportId.toLowerCase(), experienceLevel: s.experienceLevel ?? null })),
+      data: sports.map((s, i) => ({ userId, sportId: s.sportId.toLowerCase(), experienceLevel: s.experienceLevel ?? null, createdAt: inOrder(i) })),
     }),
   ]);
   return getMe(userId);

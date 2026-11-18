@@ -37,6 +37,8 @@ export interface Profile {
 
 export interface Message {
   id: string;
+  /** Client-generated idempotency key for sends (new API). */
+  client_id?: string;
   sender_id: string;
   content: string;
   type?: string;

@@ -179,3 +179,85 @@ export const meApi = {
   promptQuestions: () => api<PromptQuestion[]>('/v1/prompts/questions'),
   deleteAccount: () => api('/v1/me', { method: 'DELETE' }),
 };
+
+// ── Discover & swipes (server/src/modules/discover) ─────────────────────────────
+
+export type DiscoverPlayer = {
+  id: string;
+  name: string;
+  age: number | null;
+  gender: Gender | null;
+  city: string | null;
+  /** Rounded up to whole km; null when either side has no location. */
+  distanceKm: number | null;
+  bio: string | null;
+  lookingFor: string | null;
+  skillLevel: string | null;
+  job: string | null;
+  education: string | null;
+  heightCm: number | null;
+  workoutStyle: string | null;
+  preferredTime: string | null;
+  playFrequency: string | null;
+  homeVenue: string | null;
+  availability: string[];
+  /** Relative "/uploads/…" paths (or absolute demo URLs); pass through assetUrl(). */
+  photos: string[];
+  sports: { sportId: string; experienceLevel: string | null }[];
+  prompts: { question: { en: string; id: string }; answer: string }[];
+};
+
+export type SwipeAction = 'LIKE' | 'PASS' | 'SUPER';
+
+export type SwipeResult = {
+  isMatch: boolean;
+  matchId: string | null;
+  partner: { id: string; name: string; photoUrl: string | null };
+};
+
+export const discoverApi = {
+  /** Age and distance come from the saved profile; `sports` narrows the feed when given. */
+  list: (opts: { sports?: string[]; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.limit) q.set('limit', String(opts.limit));
+    if (opts.sports?.length) q.set('sports', opts.sports.join(','));
+    const qs = q.toString();
+    return api<{ items: DiscoverPlayer[] }>(`/v1/discover${qs ? `?${qs}` : ''}`);
+  },
+  swipe: (targetId: string, action: SwipeAction) => api<SwipeResult>('/v1/swipes', { body: { targetId, action } }),
+};
+
+// ── Chat (server/src/modules/chat) ──────────────────────────────────────────────
+
+export type ChatInvite = { sport: string; venueName: string; scheduledAt: string; note: string | null };
+
+export type ChatMessage = {
+  id: string;
+  matchId: string;
+  senderId: string;
+  type: 'TEXT' | 'SPARING_INVITE';
+  content: string;
+  invite: ChatInvite | null;
+  inviteStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED' | null;
+  clientId: string | null;
+  createdAt: string;
+};
+
+export type ChatSummary = {
+  id: string;
+  createdAt: string;
+  partner: { id: string; name: string; photoUrl: string | null };
+  lastMessage: { content: string; type: ChatMessage['type']; senderId: string; createdAt: string } | null;
+  unreadCount: number;
+};
+
+export const chatApi = {
+  list: () => api<ChatSummary[]>('/v1/matches'),
+  messages: (matchId: string) => api<ChatMessage[]>(`/v1/matches/${matchId}/messages`),
+  send: (
+    matchId: string,
+    body: { clientId: string; type: 'TEXT'; content: string } | { clientId: string; type: 'SPARING_INVITE'; content: string; invite: ChatInvite },
+  ) => api<ChatMessage>(`/v1/matches/${matchId}/messages`, { body }),
+  respond: (messageId: string, status: 'ACCEPTED' | 'DECLINED') =>
+    api<ChatMessage>(`/v1/messages/${messageId}/respond`, { body: { status } }),
+};

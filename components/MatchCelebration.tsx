@@ -74,6 +74,15 @@ function Celebration({ visible, matchData, myAvatarUrl, onClose }: Props & { mat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // Dismiss on its own after 3 s; the chat stays reachable from the Chat tab.
+  useEffect(() => {
+    if (!visible) return;
+    const id = setTimeout(onClose, 3000);
+    return () => clearTimeout(id);
+    // Only `visible` restarts the timer; onClose is a fresh function on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   const leftStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (1 - slide.value) * -160 }, { rotate: `${-8 * slide.value}deg` }],
     opacity: slide.value,

@@ -5,7 +5,7 @@ import { addMatchToCalendar } from '../lib/calendar';
 import { scheduleMatchReminder } from '../lib/notifications';
 
 import { useTheme, makeStyles, type Theme, fonts } from '@/lib/theme';
-import { useT } from '@/lib/i18n';
+import { useLanguage, useSportName, useT } from '@/lib/i18n';
 interface SparingInviteCardProps {
   inviteId: string;
   sport: string;
@@ -29,6 +29,8 @@ export default function SparingInviteCard({
   note,
 }: SparingInviteCardProps) {
   const tr = useT();
+  const sportName = useSportName();
+  const { language } = useLanguage();
   const t = useTheme();
   const styles = useStylesTheme();
   const getSportIcon = (name: string): any => {
@@ -41,11 +43,11 @@ export default function SparingInviteCard({
     if (lower.includes('futsal') || lower.includes('football')) return 'football-outline';
     return 'fitness-outline';
   };
-  const sportData = { name: sport, icon: getSportIcon(sport) };
+  const sportData = { name: sportName(sport), icon: getSportIcon(sport) };
   
   const dateObj = new Date(scheduledAt);
-  const formattedDate = dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-  const formattedTime = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = dateObj.toLocaleDateString(language, { weekday: 'short', day: 'numeric', month: 'short' });
+  const formattedTime = dateObj.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
 
   // Determine status display
   let statusBadgeColor: string = t.primary;
@@ -54,10 +56,10 @@ export default function SparingInviteCard({
 
   if (status === 'accepted') {
     statusBadgeColor = t.success;
-    statusText = 'Diterima';
+    statusText = tr('sheets.accepted');
   } else if (status === 'declined') {
     statusBadgeColor = t.danger;
-    statusText = 'Ditolak';
+    statusText = tr('sheets.declined');
   } else if (status === 'cancelled') {
     statusBadgeColor = t.textMuted;
     statusText = 'Dibatalkan';

@@ -1,13 +1,13 @@
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button, GlossFill, useTabBarInset } from '@/components/ui';
 import { useT } from '@/lib/i18n';
-import { supabase } from '../../lib/supabase';
+import { assetUrl, chatApi } from '@/lib/api';
 
 import { useTheme, makeStyles, type Theme, fonts, radius, space, type } from '@/lib/theme';
 interface MatchUser {
@@ -28,6 +28,16 @@ interface ConversationItem {
   unreadCount?: number;
 }
 
+const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80';
+
+/** "14:05" for today, "18 Nov" for older. */
+function shortTime(iso: string) {
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
 export default function MatchesScreen() {
   const t = useTheme();
   const styles = useStylesTheme();
@@ -43,76 +53,41 @@ export default function MatchesScreen() {
 
   const fetchMatchesAndChats = useCallback(async () => {
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUserId = authData?.user?.id;
-
-      if (!currentUserId) {
-        setNewMatches([]);
-        setConversations([]);
-        return;
-      }
-
-      // Fetch matches from Supabase
-      const { data: matchRows, error: matchError } = await supabase
-        .from('matches')
-        .select(`
-          id,
-          created_at,
-          user_a_id,
-          user_b_id,
-          user_a:profiles!matches_user_a_id_fkey(id, nama, foto_url),
-          user_b:profiles!matches_user_b_id_fkey(id, nama, foto_url)
-        `)
-        .or(`user_a_id.eq.${currentUserId},user_b_id.eq.${currentUserId}`)
-        .order('created_at', { ascending: false });
-
-      if (matchError || !matchRows || matchRows.length === 0) {
-        setNewMatches([]);
-        setConversations([]);
-        return;
-      }
-
-      const parsedMatches: MatchUser[] = [];
-      const parsedConversations: ConversationItem[] = [];
-
-      for (const m of matchRows) {
-        const rawPartner = m.user_a_id === currentUserId ? m.user_b : m.user_a;
-        const partner = Array.isArray(rawPartner) ? rawPartner[0] : rawPartner;
-        if (!partner) continue;
-
-        parsedMatches.push({
-          id: partner.id,
-          matchId: m.id,
-          name: partner.nama || '',
-          avatar: partner.foto_url || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
-          isNew: true,
-        });
-
-        parsedConversations.push({
-          id: m.id,
-          partnerId: partner.id,
-          name: partner.nama || '',
-          avatar: partner.foto_url || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
-          // Empty = translated placeholders at render time.
-          lastMessage: '',
-          timestamp: '',
-        });
-      }
-
-      setNewMatches(parsedMatches);
-      setConversations(parsedConversations);
+      const chats = await chatApi.list();
+      const avatarOf = (url: string | null) => assetUrl(url) ?? FALLBACK_AVATAR;
+      // Matches without a message yet sit in the "new" row; the rest are conversations.
+      setNewMatches(
+        chats
+          .filter((c) => !c.lastMessage)
+          .map((c) => ({ id: c.partner.id, matchId: c.id, name: c.partner.name, avatar: avatarOf(c.partner.photoUrl), isNew: true })),
+      );
+      setConversations(
+        chats
+          .filter((c) => c.lastMessage)
+          .map((c) => ({
+            id: c.id,
+            partnerId: c.partner.id,
+            name: c.partner.name,
+            avatar: avatarOf(c.partner.photoUrl),
+            lastMessage: c.lastMessage!.content,
+            timestamp: shortTime(c.lastMessage!.createdAt),
+            unreadCount: c.unreadCount,
+          })),
+      );
     } catch {
-      setNewMatches([]);
-      setConversations([]);
+      // Keep what is on screen; pull to refresh tries again.
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchMatchesAndChats();
-  }, [fetchMatchesAndChats]);
+  // Reload whenever the tab comes back into view (e.g. after reading a chat).
+  useFocusEffect(
+    useCallback(() => {
+      fetchMatchesAndChats();
+    }, [fetchMatchesAndChats]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -188,6 +163,7 @@ export default function MatchesScreen() {
             </View>
           )}
 
+          {conversations.length > 0 && (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{tr('chat.messages')}</Text>
             <View style={styles.list}>
@@ -219,6 +195,7 @@ export default function MatchesScreen() {
               ))}
             </View>
           </View>
+          )}
         </ScrollView>
       )}
     </View>

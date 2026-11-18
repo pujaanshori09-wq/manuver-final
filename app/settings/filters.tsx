@@ -16,30 +16,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// If you have your supabase client configured at lib/supabase.ts:
-import { supabase } from '../../lib/supabase';
+import { meApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { ALL_FILTER_SPORT_IDS, FILTER_SPORTS, loadSportFilter, saveSportFilter } from '@/lib/discoverFilters';
 
 import { Toggle } from '@/components/ui';
 import { useTheme, makeStyles, type Theme } from '@/lib/theme';
-import { useT } from '@/lib/i18n';
-const STORAGE_KEY = '@manuver_match_filters_v1';
-
-const AVAILABLE_SPORTS = [
-  { id: 'badminton', name: 'Badminton', icon: 'tennisball-outline' as const },
-  { id: 'running', name: 'Running', icon: 'walk-outline' as const },
-  { id: 'gym', name: 'Gym & Fitness', icon: 'barbell-outline' as const },
-  { id: 'futsal', name: 'Futsal', icon: 'football-outline' as const },
-  { id: 'basket', name: 'Basket', icon: 'basketball-outline' as const },
-  { id: 'tennis', name: 'Tennis', icon: 'tennisball-outline' as const },
-  { id: 'yoga', name: 'Yoga', icon: 'body-outline' as const },
-  { id: 'cycling', name: 'Cycling', icon: 'bicycle-outline' as const },
-  { id: 'swimming', name: 'Renang', icon: 'water-outline' as const },
-  { id: 'boxing', name: 'Boxing', icon: 'fitness-outline' as const },
-  { id: 'volleyball', name: 'Voli', icon: 'american-football-outline' as const },
-  { id: 'calisthenics', name: 'Calisthenics', icon: 'pulse-outline' as const },
-];
+import { useSportName, useT } from '@/lib/i18n';
+const AVAILABLE_SPORTS = FILTER_SPORTS;
 
 const DISTANCE_PRESETS = [5, 15, 30, 50, 100];
 
@@ -59,7 +44,7 @@ const DEFAULT_FILTERS: MatchFilterSettings = {
   minAge: 20,
   maxAge: 32,
   strictAge: false,
-  selectedSports: ['badminton', 'running', 'gym', 'tennis'],
+  selectedSports: ALL_FILTER_SPORT_IDS,
   showMyProfile: true,
 };
 
@@ -69,6 +54,8 @@ export default function MatchFiltersScreen() {
   const styles = useStylesTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const sportName = useSportName();
+  const { me, setMe } = useAuth();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -90,28 +77,27 @@ export default function MatchFiltersScreen() {
   const trackPageXRef = useRef<number>(0);
   const trackViewRef = useRef<ViewInstance>(null);
 
-  // Load saved preferences from AsyncStorage on mount
+  // Age, distance and visibility come from the account; the sport filter is kept on this device.
   useEffect(() => {
-    async function loadSavedFilters() {
-      try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed: MatchFilterSettings = JSON.parse(stored);
-          setMaxDistance(parsed.maxDistance ?? DEFAULT_FILTERS.maxDistance);
-          setStrictDistance(parsed.strictDistance ?? DEFAULT_FILTERS.strictDistance);
-          setMinAge(String(parsed.minAge ?? DEFAULT_FILTERS.minAge));
-          setMaxAge(String(parsed.maxAge ?? DEFAULT_FILTERS.maxAge));
-          setStrictAge(parsed.strictAge ?? DEFAULT_FILTERS.strictAge);
-          setSelectedSports(parsed.selectedSports ?? DEFAULT_FILTERS.selectedSports);
-          setShowMyProfile(parsed.showMyProfile ?? DEFAULT_FILTERS.showMyProfile);
-        }
-      } catch (e) {
-        console.warn('Gagal memuat filter lokal:', e);
-      } finally {
-        setLoading(false);
+    let alive = true;
+    (async () => {
+      const sports = await loadSportFilter();
+      if (!alive) return;
+      const p = me?.profile;
+      if (p) {
+        setMaxDistance(Math.min(Math.max(p.maxDistanceKm, 1), 100));
+        setMinAge(String(p.ageMin));
+        setMaxAge(String(p.ageMax));
+        setShowMyProfile(!p.ghostMode);
       }
-    }
-    loadSavedFilters();
+      setSelectedSports(sports);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+    // Read once when the screen opens; later changes to `me` come from this screen's own save.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Compute percentage for distance track (1 - 100 km)
@@ -165,10 +151,10 @@ export default function MatchFiltersScreen() {
     setMaxAge(val.replace(/[^0-9]/g, ''));
   };
 
-  // Save filters to AsyncStorage, Supabase (if available), and router navigation
+  // Save: age, distance and visibility to the account; sports to this device.
   const handleSave = async () => {
     const parsedMin = parseInt(minAge, 10) || 18;
-    const parsedMax = parseInt(maxAge, 10) || 40;
+    const parsedMax = Math.min(parseInt(maxAge, 10) || 40, 99);
 
     if (parsedMin < 18) {
       Alert.alert(tr('filters.ageRange'), tr('filters.minAge'));
@@ -195,19 +181,15 @@ export default function MatchFiltersScreen() {
 
     setSaving(true);
     try {
-      // 1. Persist to local AsyncStorage
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-
-      // 2. Persist to Supabase if connected
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('profiles').update({
-          age_pref_min: parsedMin,
-          age_pref_max: parsedMax,
-          is_ghost_mode: !showMyProfile,
-          updated_at: new Date().toISOString(),
-        }).eq('id', user.id);
-      }
+      await saveSportFilter(payload.selectedSports);
+      setMe(
+        await meApi.updateProfile({
+          ageMin: parsedMin,
+          ageMax: parsedMax,
+          maxDistanceKm: maxDistance,
+          ghostMode: !showMyProfile,
+        }),
+      );
 
       // 3. Return to previous screen with filters encoded in navigation params
       router.back();
@@ -453,7 +435,7 @@ export default function MatchFiltersScreen() {
                       isSelected && styles.sportPillTextActive,
                     ]}
                   >
-                    {sport.name}
+                    {sportName(sport.id)}
                   </Text>
                   {isSelected && (
                     <Ionicons name="checkmark-circle" size={14} color={t.primary} />

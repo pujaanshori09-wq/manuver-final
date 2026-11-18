@@ -27,72 +27,8 @@ import RadarAnimation from '../../components/RadarAnimation';
 import SwipeCard, { SwipeCardRef } from '../../components/SwipeCard';
 import { useLocationManager } from '../../hooks/useLocationManager';
 import { useProfiles } from '../../hooks/useProfiles';
-import { supabase } from '../../lib/supabase';
-import { Profile } from '../../types/database';
-
-const DEMO_PROFILES: Profile[] = [
-  {
-    id: 'demo-1',
-    nama: 'Pengguna Baru',
-    umur: 24,
-    foto_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=80&crop=bottom',
-    ],
-    alamat: 'GBK Senayan',
-    jarak: '2 km away',
-    hobi: 'Gym & Fitness, Running, Badminton',
-    prompt_question: 'Target olahraga bulan ini',
-    prompt_answer: 'Rutinitas lari 5K sub-28 menit & konsisten gym 3x seminggu. Butuh partner yang gak gampang cancel!',
-    bio: 'Senang olahraga bareng. Mencari partner latihan rutin di sekitarku dan ikut event lari bersama.',
-    skill_level: 'Intermediate',
-    availability: ['Pagi', 'Sore', 'Akhir Pekan'],
-    distance_pref: '≤ 10 km',
-    interests: ['Health', 'Travel', 'Music', 'Food'],
-  },
-  {
-    id: 'demo-2',
-    nama: 'Dinda',
-    umur: 25,
-    foto_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1000&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1538805060514-97d9cc17730c?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1000&q=80',
-    ],
-    alamat: 'Senayan',
-    jarak: '3 km away',
-    hobi: 'Badminton, Running, Yoga',
-    prompt_question: 'Partner sparing ideal buatku',
-    prompt_answer: 'Yang mainnya seru, bisa rally panjang badminton, dan setelahnya ngopi bareng santai.',
-    bio: 'Cari partner badminton santai atau sparring lari pagi di GBK. Let’s stay active together! 💪🏸',
-    skill_level: 'Advanced',
-    availability: ['Pagi', 'Akhir Pekan'],
-    distance_pref: '≤ 5 km',
-    interests: ['Health', 'Outdoor', 'Coffee'],
-  },
-  {
-    id: 'demo-3',
-    nama: 'Reza',
-    umur: 27,
-    foto_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=1000&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?auto=format&fit=crop&w=1000&q=80',
-    ],
-    alamat: 'Cilandak',
-    jarak: '4 km away',
-    hobi: 'Gym & Fitness, Basketball, Running',
-    prompt_question: 'Gaya latihan favorit',
-    prompt_answer: 'Push-Pull-Legs di gym, lanjut pickup game basket Sabtu sore. Disiplin tapi tetap enjoy!',
-    bio: 'Gym 4x seminggu & main basket santai akhir pekan. Looking for a disciplined gym bro.',
-    skill_level: 'Intermediate',
-    availability: ['Malam', 'Akhir Pekan'],
-    distance_pref: '≤ 15 km',
-  }
-];
+import { meApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 export default function DiscoverScreen() {
   // Discover is always dark, whatever the system setting.
@@ -144,20 +80,36 @@ function Discover() {
     }
   }, [locationLoading, permissionState]);
 
+  const { refreshProfile } = useAuth();
+
+  // Send the current position to the server (only the distance is ever shown to others),
+  // then reload the profile so the deck refetches with the new location.
+  const syncLocation = useCallback(async () => {
+    const loc = await getCurrentLocation();
+    if (!loc) return;
+    try {
+      await meApi.setLocation(loc.coords.latitude, loc.coords.longitude);
+      await refreshProfile();
+    } catch {
+      // Keep the last known location; distance just stays as it was.
+    }
+  }, [getCurrentLocation, refreshProfile]);
+
+  // Already allowed (now or in an earlier session): refresh the position once per visit.
+  const synced = useRef(false);
+  useEffect(() => {
+    if (permissionState === 'GRANTED' && !synced.current) {
+      synced.current = true;
+      syncLocation();
+    }
+  }, [permissionState, syncLocation]);
+
   const handleRequestLocation = async () => {
     const newState = await requestPermissions();
     if (newState === 'GRANTED') {
       setModalVisible(false);
-      const loc = await getCurrentLocation();
-      if (loc) {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user?.id) {
-          await supabase.from('profiles').update({
-            last_latitude: loc.coords.latitude,
-            last_longitude: loc.coords.longitude,
-          }).eq('id', userData.user.id);
-        }
-      }
+      synced.current = true;
+      await syncLocation();
       fetchProfiles();
     }
   };

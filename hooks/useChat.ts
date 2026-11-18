@@ -1,21 +1,46 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { useCallback } from 'react';
+import { chatApi, type ChatMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Message } from '../types/database';
 
-const isTemp = (id: string) => id.startsWith('tmp-');
+/** shortcut: new messages arrive by polling every 3 s; switch to Socket.IO once the API is deployed off the dev tunnel. */
+const POLL_MS = 3000;
+
+/** Idempotency key for a send, not a secret, so Math.random is enough. */
+const uuid = () =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+
+/** Server message → the shape the chat screen and invite card already render. */
+function toMessage(m: ChatMessage): Message {
+  return {
+    id: m.id,
+    client_id: m.clientId ?? undefined,
+    sender_id: m.senderId,
+    content: m.content,
+    created_at: m.createdAt,
+    type: m.type === 'SPARING_INVITE' ? 'sparing_invite' : 'text',
+    metadata: m.invite
+      ? {
+          sport: m.invite.sport,
+          venue_name: m.invite.venueName,
+          scheduled_at: m.invite.scheduledAt,
+          note: m.invite.note,
+          status: (m.inviteStatus ?? 'PENDING').toLowerCase(),
+        }
+      : undefined,
+  };
+}
 
 export function useChat(matchId: string | string[] | undefined) {
   const queryClient = useQueryClient();
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const tempCounter = useRef(0);
-  const key = ['chat', matchId] as const;
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) setCurrentUserId(data.user.id);
-    });
-  }, []);
+  const { me } = useAuth();
+  const currentUserId = me?.id ?? null;
+  const id = typeof matchId === 'string' ? matchId : undefined;
+  const key = ['chat', id] as const;
 
   const {
     data: messages = [],
@@ -24,135 +49,90 @@ export function useChat(matchId: string | string[] | undefined) {
     refetch,
   } = useQuery({
     queryKey: key,
-    enabled: !!matchId,
+    enabled: !!id,
+    refetchInterval: POLL_MS,
     queryFn: async (): Promise<Message[]> => {
-      const { data, error: fetchError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('match_id', matchId as string)
-        .order('created_at', { ascending: true });
-      if (fetchError) throw fetchError;
-      return (data ?? []) as Message[];
+      const saved = (await chatApi.messages(id!)).map(toMessage);
+      // Keep our own sends the server list does not have yet: still sending, failed, or saved
+      // after this poll left (newer than anything it returned).
+      const savedIds = new Set(saved.map((m) => m.client_id));
+      const newest = saved.at(-1)?.created_at ?? '';
+      const pending = (queryClient.getQueryData<Message[]>(key) ?? []).filter(
+        (m) =>
+          m.sender_id === currentUserId &&
+          !!m.client_id &&
+          !savedIds.has(m.client_id) &&
+          (!!m.status || m.created_at > newest),
+      );
+      return [...saved, ...pending];
     },
   });
 
-  // Realtime: new rows from the other person (and echoes of our own sends).
-  useEffect(() => {
-    if (!matchId) return;
-    const id = matchId as string;
-    let hasSubscribed = false;
-
-    const channel = supabase
-      .channel(`chat:${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${id}` },
-        (payload) => {
-          const row = payload.new as Message;
-          queryClient.setQueryData<Message[]>(key, (old = []) => {
-            if (old.some((m) => m.id === row.id)) return old;
-            // Echo of our own pending send: swap the placeholder for the saved row
-            // instead of showing the message twice.
-            const pending = old.findIndex(
-              (m) =>
-                isTemp(m.id) &&
-                m.sender_id === row.sender_id &&
-                m.content === row.content &&
-                (m.type ?? 'text') === (row.type ?? 'text'),
-            );
-            if (pending >= 0) {
-              const next = [...old];
-              next[pending] = row;
-              return next;
-            }
-            return [...old, row];
-          });
-        },
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          // After a reconnect we may have missed rows: reload once.
-          if (hasSubscribed) queryClient.invalidateQueries({ queryKey: key });
-          hasSubscribed = true;
+  const replace = useCallback(
+    (tempId: string, next: Message | Partial<Message> | null) =>
+      queryClient.setQueryData<Message[]>(key, (old = []) => {
+        if (next === null) return old.filter((m) => m.id !== tempId);
+        // A poll may already have brought the saved copy in; then just drop the placeholder.
+        if ('id' in next && next.id && next.id !== tempId && old.some((m) => m.id === next.id)) {
+          return old.filter((m) => m.id !== tempId);
         }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+        return old.map((m) => (m.id === tempId ? { ...m, ...next } : m));
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, queryClient]);
-
-  const patch = useCallback(
-    (tempId: string, change: Partial<Message> | null) => {
-      queryClient.setQueryData<Message[]>(key, (old = []) =>
-        change === null ? old.filter((m) => m.id !== tempId) : old.map((m) => (m.id === tempId ? { ...m, ...change } : m)),
-      );
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryClient, matchId],
+    [queryClient, id],
   );
 
-  /** Insert a pending message; swap in the saved row, or mark it failed so it can be retried. */
+  /** Send a pending message; swap in the saved one, or mark it failed so it can be retried. */
   const deliver = useCallback(
     async (temp: Message): Promise<boolean> => {
-      const id = matchId as string;
-      patch(temp.id, { status: 'sending' });
-
-      const { data, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          match_id: id,
-          sender_id: temp.sender_id,
-          content: temp.content,
-          ...(temp.type && temp.type !== 'text' ? { type: temp.type, metadata: temp.metadata } : {}),
-        })
-        .select()
-        .single();
-
-      if (insertError || !data) {
-        patch(temp.id, { status: 'failed' });
+      if (!id || !temp.client_id) return false;
+      replace(temp.id, { status: 'sending' });
+      try {
+        const m = temp.metadata;
+        const saved = await chatApi.send(
+          id,
+          temp.type === 'sparing_invite'
+            ? {
+                clientId: temp.client_id,
+                type: 'SPARING_INVITE',
+                content: temp.content,
+                invite: { sport: m.sport, venueName: m.venue_name, scheduledAt: m.scheduled_at, note: m.note ?? null },
+              }
+            : { clientId: temp.client_id, type: 'TEXT', content: temp.content },
+        );
+        replace(temp.id, { ...toMessage(saved), status: undefined });
+        return true;
+      } catch {
+        replace(temp.id, { status: 'failed' });
         return false;
       }
-
-      queryClient.setQueryData<Message[]>(key, (old = []) => {
-        // Realtime may already have swapped this placeholder for the saved row.
-        if (old.some((m) => m.id === (data as Message).id)) return old.filter((m) => m.id !== temp.id);
-        return old.map((m) => (m.id === temp.id ? (data as Message) : m));
-      });
-      return true;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [matchId, patch, queryClient],
+    [id, replace],
   );
 
-  const enqueue = useCallback(
-    (partial: Pick<Message, 'content'> & Partial<Pick<Message, 'type' | 'metadata'>>) => {
-      if (!matchId || !currentUserId) return Promise.resolve(false);
-      const temp: Message = {
-        id: `tmp-${Date.now()}-${tempCounter.current++}`,
-        sender_id: currentUserId,
-        created_at: new Date().toISOString(),
-        status: 'sending',
-        ...partial,
-      };
-      queryClient.setQueryData<Message[]>(key, (old = []) => [...old, temp]);
-      return deliver(temp);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [matchId, currentUserId, deliver, queryClient],
-  );
+  const enqueue = (partial: Pick<Message, 'content'> & Partial<Pick<Message, 'type' | 'metadata'>>) => {
+    if (!id || !currentUserId) return Promise.resolve(false);
+    const clientId = uuid();
+    const temp: Message = {
+      id: `tmp-${clientId}`,
+      client_id: clientId,
+      sender_id: currentUserId,
+      created_at: new Date().toISOString(),
+      status: 'sending',
+      ...partial,
+    };
+    queryClient.setQueryData<Message[]>(key, (old = []) => [...old, temp]);
+    return deliver(temp);
+  };
 
   const sendMessage = (text: string) => {
     const content = text.trim();
-    if (!content) return Promise.resolve(false);
-    // Push notifications are sent server-side (messages webhook → notify-message).
-    return enqueue({ content });
+    return content ? enqueue({ content }) : Promise.resolve(false);
   };
 
-  const sendSparingInvite = (inviteData: any) =>
+  const sendSparingInvite = (inviteData: { sport: string; venue_name: string; scheduled_at: string; note: string | null }) =>
     enqueue({
-      content: `Sparing ${inviteData.sport} @ ${inviteData.venue_name}`,
+      content: `Sparing ${inviteData.sport} @ ${inviteData.venue_name}`.slice(0, 200),
       type: 'sparing_invite',
       metadata: { ...inviteData, status: 'pending' },
     });
@@ -162,7 +142,7 @@ export function useChat(matchId: string | string[] | undefined) {
     return temp ? deliver(temp) : Promise.resolve(false);
   };
 
-  const discardMessage = (tempId: string) => patch(tempId, null);
+  const discardMessage = (tempId: string) => replace(tempId, null);
 
   /** Accept/decline an invite. Returns false (and rolls back) when the server refuses. */
   const updateInviteStatus = async (messageId: string, newStatus: 'accepted' | 'declined'): Promise<boolean> => {
@@ -170,17 +150,13 @@ export function useChat(matchId: string | string[] | undefined) {
     queryClient.setQueryData<Message[]>(key, (old = []) =>
       old.map((m) => (m.id === messageId ? { ...m, metadata: { ...m.metadata, status: newStatus } } : m)),
     );
-
-    const { error: rpcError } = await supabase.rpc('respond_to_sparing_invite', {
-      p_message_id: messageId,
-      p_status: newStatus,
-    });
-
-    if (rpcError) {
+    try {
+      await chatApi.respond(messageId, newStatus === 'accepted' ? 'ACCEPTED' : 'DECLINED');
+      return true;
+    } catch {
       queryClient.setQueryData(key, previous);
       return false;
     }
-    return true;
   };
 
   return {

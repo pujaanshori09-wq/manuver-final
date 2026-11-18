@@ -42,6 +42,8 @@ export const storage: Storage = {
     await rm(safePath(prefix), { recursive: true, force: true });
   },
   url(key) {
+    // Seeded demo photos are absolute URLs; real uploads are keys served under /uploads.
+    if (/^https?:\/\//.test(key)) return key;
     return `/uploads/${key}`;
   },
 };

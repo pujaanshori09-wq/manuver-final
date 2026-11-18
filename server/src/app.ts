@@ -7,6 +7,8 @@ import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { matchesRouter, messagesRouter } from './modules/chat/chat.routes.js';
+import { discoverRouter, swipesRouter } from './modules/discover/discover.routes.js';
 import { meRouter, promptsRouter } from './modules/me/me.routes.js';
 import { uploadRoot } from './lib/storage.js';
 
@@ -43,6 +45,10 @@ export function createApp() {
   v1.use('/auth', authRouter);
   v1.use('/me', meRouter);
   v1.use('/prompts', promptsRouter);
+  v1.use('/discover', discoverRouter);
+  v1.use('/swipes', swipesRouter);
+  v1.use('/matches', matchesRouter);
+  v1.use('/messages', messagesRouter);
   app.use('/v1', v1);
 
   app.use(notFoundHandler);
