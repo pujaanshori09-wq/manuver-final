@@ -25,12 +25,12 @@ config.resolver.blockList = [
 
 // ── Development API proxy ─────────────────────────────────────────────────────
 // Phones often cannot reach the laptop directly (Wi-Fi client isolation), but they can
-// reach this Metro dev server (LAN or Expo tunnel). Requests to /v1/* and /uploads/*
-// are forwarded to the local API, so the app needs no second tunnel or extra account.
+// reach this Metro dev server (LAN or Expo tunnel). Requests to /v1/*, /uploads/* and the
+// public activity pages /a/* are forwarded to the local API, so the app needs no second tunnel.
 // Development only — production builds talk to EXPO_PUBLIC_API_URL directly.
 const http = require('http');
 const API_TARGET = new URL(process.env.MANUVER_API_PROXY_TARGET || 'http://127.0.0.1:4000');
-const PROXIED = /^\/(v1|uploads)(\/|$)/;
+const PROXIED = /^\/(v1|uploads|a)(\/|$)/;
 
 function proxyToApi(req, res) {
   const upstream = http.request(

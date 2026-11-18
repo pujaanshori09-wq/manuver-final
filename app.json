@@ -63,7 +63,14 @@
       "@react-native-community/datetimepicker",
       "expo-image",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Manuver uses your location to show distance to players and to record your runs, rides and hikes."
+        }
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

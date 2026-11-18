@@ -261,3 +261,61 @@ export const chatApi = {
   respond: (messageId: string, status: 'ACCEPTED' | 'DECLINED') =>
     api<ChatMessage>(`/v1/messages/${messageId}/respond`, { body: { status } }),
 };
+
+// ── Activities & public profiles (server/src/modules/activities) ───────────────
+
+export type Activity = {
+  id: string;
+  userId: string;
+  type: 'RUN' | 'RIDE' | 'HIKE';
+  title: string;
+  startedAt: string;
+  endedAt: string;
+  movingSec: number;
+  distanceM: number;
+  showOnProfile: boolean;
+  /** Encoded polyline. Other people get it with the first and last 200 m cut off. */
+  route: string;
+  /** Owner only: anyone with the link can view it. */
+  isPublic?: boolean;
+  publicUrl?: string | null;
+};
+
+export type NewActivity = Omit<Activity, 'id' | 'userId' | 'route' | 'isPublic' | 'publicUrl'> & { clientId: string; polyline: string };
+
+export type PublicProfile = {
+  id: string;
+  name: string;
+  age: number | null;
+  city: string | null;
+  bio: string | null;
+  skillLevel: string | null;
+  job: string | null;
+  lookingFor: string | null;
+  preferredTime: string | null;
+  homeVenue: string | null;
+  photos: string[];
+  sports: { sportId: string; experienceLevel: string | null }[];
+  prompts: { question: { en: string; id: string }; answer: string }[];
+  activities: Activity[];
+};
+
+export const activitiesApi = {
+  create: (a: NewActivity) => api<Activity>('/v1/activities', { body: a }),
+  mine: (opts: { onProfile?: boolean; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.onProfile) q.set('onProfile', 'true');
+    if (opts.limit) q.set('limit', String(opts.limit));
+    const qs = q.toString();
+    return api<Activity[]>(`/v1/activities${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: string) => api<Activity>(`/v1/activities/${id}`),
+  update: (id: string, patch: { title?: string; showOnProfile?: boolean; isPublic?: boolean }) =>
+    api<Activity>(`/v1/activities/${id}`, { method: 'PATCH', body: patch }),
+  remove: (id: string) => api(`/v1/activities/${id}`, { method: 'DELETE' }),
+};
+
+export const usersApi = {
+  get: (id: string) => api<PublicProfile>(`/v1/users/${id}`),
+  activities: (id: string) => api<Activity[]>(`/v1/users/${id}/activities`),
+};

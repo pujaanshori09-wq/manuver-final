@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,10 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, IconButton, useTabBarInset } from '@/components/ui';
 import { ProBadge } from '@/components/ui/ProBadge';
-import { assetUrl } from '@/lib/api';
+import { activitiesApi, assetUrl } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useLanguage, useSportName, useT } from '@/lib/i18n';
 import { fonts, makeStyles, radius, space, type, useTheme } from '@/lib/theme';
+import { ProfileActivities } from '../../components/ProfileActivities';
 import { sportIcon } from '../../components/ProfileCardSummary';
 
 const MAX_PHOTOS = 4;
@@ -43,6 +45,11 @@ export default function ProfileTabScreen() {
   const availability = profile?.availability ?? [];
   const prompts = (me?.prompts ?? []).map((pr) => ({ question: pr.question[language === 'id' ? 'id' : 'en'], answer: pr.answer }));
   const stats = me ? { sessions: me.stats.sessionsJoined, matches: me.stats.matches } : null;
+  const { data: myActivities = [] } = useQuery({
+    queryKey: ['activities', 'profile', me?.id],
+    enabled: !!me,
+    queryFn: () => activitiesApi.mine({ onProfile: true, limit: 3 }),
+  });
 
   // Completeness: the fields this app can actually edit today.
   const checks = [
@@ -253,6 +260,10 @@ export default function ProfileTabScreen() {
             )}
           </Tile>
         </View>
+
+        {/* Activities this player chose to show on the profile */}
+        <SectionTitle title={tr('activity.sectionTitle')} />
+        <ProfileActivities activities={myActivities} />
       </ScrollView>
 
       {/* Floating upsell, as in the reference: card + counters strip above the tab bar */}

@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Chip, GlossFill, glossShadow, IconButton, useTabBarInset } from '@/components/ui';
 import { useT } from '@/lib/i18n';
-import SessionsFeed from '../../components/SessionsFeed';
+import ActivityFeed from '../../components/ActivityFeed';
 import { supabase } from '../../lib/supabase';
 
 import { useTheme, makeStyles, type Theme, fonts, radius, space, type } from '@/lib/theme';
@@ -83,7 +83,7 @@ export default function ExploreScreen() {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} accessibilityRole="header">{tr('explore.title')}</Text>
-          <Text style={styles.headerSubtitle}>{segment === 'events' ? tr('explore.subtitle') : tr('sessions.subtitle')}</Text>
+          <Text style={styles.headerSubtitle}>{segment === 'events' ? tr('explore.subtitle') : tr('activity.subtitle')}</Text>
         </View>
         <IconButton icon="notifications-outline" accessibilityLabel={tr('explore.notifications')} />
       </View>
@@ -100,7 +100,7 @@ export default function ExploreScreen() {
               style={[styles.segmentItem, on && styles.segmentOn]}
             >
               <Text style={[styles.segmentText, on && styles.segmentTextOn]}>
-                {k === 'events' ? tr('explore.events') : tr('sessions.title')}
+                {k === 'events' ? tr('explore.events') : tr('activity.title')}
               </Text>
             </Pressable>
           );
@@ -108,7 +108,7 @@ export default function ExploreScreen() {
       </View>
 
       {segment === 'sessions' ? (
-        <SessionsFeed />
+        <ActivityFeed />
       ) : (
       <>
       <View style={styles.searchContainer}>

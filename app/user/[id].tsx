@@ -17,10 +17,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+// shortcut: block and report still go through Supabase until stage 6 moves them to the new API.
 import { supabase } from '../../lib/supabase';
+import { assetUrl, usersApi } from '@/lib/api';
+import { ProfileActivities } from '../../components/ProfileActivities';
 
 import { useTheme, makeStyles, type Theme, fonts, space, radius } from '@/lib/theme';
-import { useSportName, useT, type TKey } from '@/lib/i18n';
+import { useLanguage, useSportName, useT, type TKey } from '@/lib/i18n';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 1.25);
 
@@ -61,13 +64,30 @@ export default function UserDetailScreen() {
   // `id` is the other player's profile id (chat passes partnerId).
   const { id, name, avatar } = useLocalSearchParams();
 
+  const { language } = useLanguage();
   const { data: profile, isLoading, error, refetch } = useQuery({
     queryKey: ['public-profile', id],
     enabled: !!id,
-    queryFn: async () => {
-      const { data, error: rpcError } = await supabase.rpc('get_public_profile', { p_user_id: id });
-      if (rpcError) throw rpcError;
-      return (data ?? null) as PublicProfile | null;
+    // Only matched players can open a profile (the server answers 404 otherwise).
+    queryFn: async (): Promise<PublicProfile & { activities: Awaited<ReturnType<typeof usersApi.get>>['activities'] }> => {
+      const p = await usersApi.get(id as string);
+      return {
+        id: p.id,
+        nama: p.name,
+        umur: p.age,
+        foto_url: null,
+        photos: p.photos.map((u) => assetUrl(u)).filter((u): u is string => !!u),
+        bio: p.bio,
+        skill_level: p.skillLevel,
+        pekerjaan: p.job,
+        domisili: p.city,
+        looking_for: p.lookingFor,
+        preferred_time: p.preferredTime,
+        home_venue: p.homeVenue,
+        sports: p.sports.map((sp) => ({ sport_id: sp.sportId, experience_level: sp.experienceLevel })),
+        prompts: p.prompts.map((pr) => ({ question_text: language === 'id' ? pr.question.id : pr.question.en, answer_text: pr.answer })),
+        activities: p.activities,
+      };
     },
   });
 
@@ -310,6 +330,14 @@ export default function UserDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* Activities this player chose to show on their profile */}
+        {profile?.activities.length ? (
+          <View style={styles.bodySection}>
+            <Text style={styles.sectionHeading}>{tr('activity.sectionTitle')}</Text>
+            <ProfileActivities activities={profile.activities} userId={profile.id} style={{ paddingHorizontal: 0 }} />
+          </View>
+        ) : null}
       </ScrollView>
       )}
 

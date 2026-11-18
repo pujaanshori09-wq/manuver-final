@@ -42,6 +42,7 @@ model User {
   messages       Message[]
   blocksMade     Block[]        @relation("BlocksMade")
   blocksReceived Block[]        @relation("BlocksReceived")
+  activities     Activity[]
   reportsMade    Report[]       @relation("ReportsMade")
   reportsAgainst Report[]       @relation("ReportsAgainst")
   sessions       OpenSession[]
@@ -488,4 +489,40 @@ model EventRegistration {
 
   @@id([eventId, userId])
   @@map("event_registrations")
+}
+
+// ── Activities (GPS-recorded runs, rides, hikes) ─────────────────────────────
+
+enum ActivityType {
+  RUN
+  RIDE
+  HIKE
+}
+
+model Activity {
+  id            String       @id @default(uuid()) @db.Uuid
+  userId        String       @db.Uuid
+  /// Client-generated; re-uploading the same recording returns the stored activity.
+  clientId      String       @db.Uuid
+  type          ActivityType
+  title         String       @db.VarChar(80)
+  startedAt     DateTime
+  endedAt       DateTime
+  /// Seconds actually moving (pauses excluded).
+  movingSec     Int
+  distanceM     Int
+  /// Google encoded polyline (precision 5) of the full route; only the owner sees it untrimmed.
+  polyline      String
+  showOnProfile Boolean      @default(true)
+  /// Anyone with the link can view the activity (off by default).
+  isPublic      Boolean      @default(false)
+  /// Unguessable code in the public link (/a/<code>); kept when the link is switched off and on again.
+  publicSlug    String?      @unique
+  createdAt     DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId, startedAt])
+  @@map("activities")
 }
