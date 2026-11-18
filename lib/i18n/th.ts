@@ -137,6 +137,8 @@ export const th: Dictionary = {
   onboarding: {
     languageTitle: 'เลือกภาษา',
     languageSubtitle: 'เปลี่ยนภายหลังได้ในการตั้งค่า',
+    languageSearch: "ค้นหาภาษา",
+    languageNoMatch: "ไม่พบภาษาที่ตรงกัน",
     otherGender: 'อื่น ๆ',
     addOther: '+ อื่น ๆ',
     otherSport: 'อื่น ๆ',
@@ -255,6 +257,9 @@ export const th: Dictionary = {
     pass: 'ผ่าน',
     like: 'ชวนเล่น',
     super: 'ชวนแบบซูเปอร์',
+    skipShort: "ข้าม",
+    boostShort: "บูสต์",
+    inviteShort: "ชวนเล่นกีฬา",
     moreInfo: 'เปิดโปรไฟล์เต็ม',
     lookingFor: 'กำลังหาคู่เล่น',
     photoVerified: 'ยืนยันรูปแล้ว',

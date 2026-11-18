@@ -137,6 +137,8 @@ export const zh: Dictionary = {
   onboarding: {
     languageTitle: '选择你的语言',
     languageSubtitle: '之后可以在设置中更改。',
+    languageSearch: "搜索语言",
+    languageNoMatch: "未找到匹配的语言",
     otherGender: '其他',
     addOther: '+ 其他',
     otherSport: '其他',
@@ -255,6 +257,9 @@ export const zh: Dictionary = {
     pass: '跳过',
     like: '邀请一起玩',
     super: '超级邀请',
+    skipShort: "跳过",
+    boostShort: "加速",
+    inviteShort: "约运动",
     moreInfo: '查看完整资料',
     lookingFor: '正在找搭子',
     photoVerified: '照片已验证',

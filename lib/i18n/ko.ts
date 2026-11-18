@@ -137,6 +137,8 @@ export const ko: Dictionary = {
   onboarding: {
     languageTitle: '언어를 선택하세요',
     languageSubtitle: '나중에 설정에서 바꿀 수 있어요.',
+    languageSearch: "언어 검색",
+    languageNoMatch: "일치하는 언어가 없어요",
     otherGender: '기타',
     addOther: '+ 기타',
     otherSport: '기타',
@@ -255,6 +257,9 @@ export const ko: Dictionary = {
     pass: '패스',
     like: '같이 하자고 초대',
     super: '슈퍼 초대',
+    skipShort: "건너뛰기",
+    boostShort: "부스트",
+    inviteShort: "운동 초대",
     moreInfo: '프로필 전체 보기',
     lookingFor: '메이트 찾는 중',
     photoVerified: '사진 인증됨',

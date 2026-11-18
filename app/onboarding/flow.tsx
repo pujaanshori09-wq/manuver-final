@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -83,6 +83,12 @@ export default function OnboardingFlowScreen() {
   const { me, setMe } = useAuth();
   const { language, setLanguage } = useLanguage();
   const tr = useT();
+  const [langQuery, setLangQuery] = useState('');
+  const visibleLanguages = useMemo(() => {
+    const q = langQuery.trim().toLowerCase();
+    if (!q) return LANGUAGES;
+    return LANGUAGES.filter((l) => [l.native, l.english, l.code, l.region].some((v) => v.toLowerCase().includes(q)));
+  }, [langQuery]);
   const t = useTheme();
   const s = useStyles();
 
@@ -267,11 +273,15 @@ export default function OnboardingFlowScreen() {
             title={translate('onboarding.languageTitle', undefined, 'en')}
             subtitle={translate('onboarding.languageTitle', undefined, 'id')}
           />
+          <LanguageSearch value={langQuery} onChange={setLangQuery} />
           <View style={s.langList} accessibilityRole="radiogroup">
-            {LANGUAGES.map(({ code, native }) => (
+            {visibleLanguages.length === 0 && <Text style={s.langEmpty}>{tr('onboarding.languageNoMatch')}</Text>}
+            {visibleLanguages.map(({ code, native, english, region }) => (
               <LanguageOption
                 key={code}
                 label={native}
+                detail={english}
+                region={region}
                 selected={language === code}
                 onPress={() => {
                   if (language === code) return;
@@ -281,7 +291,7 @@ export default function OnboardingFlowScreen() {
               />
             ))}
           </View>
-          <Text style={s.hint}>{tr('onboarding.languageSubtitle')}</Text>
+          <Text style={[s.hint, { marginTop: 14 }]}>{tr('onboarding.languageSubtitle')}</Text>
         </Page>
 
         {/* 2 — House rules */}
@@ -515,7 +525,46 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function LanguageOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function LanguageSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const s = useStyles();
+  const t = useTheme();
+  const tr = useT();
+  return (
+    <View style={s.langSearch}>
+      <Ionicons name="search" size={18} color={t.textMuted} />
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={tr('onboarding.languageSearch')}
+        placeholderTextColor={t.textMuted}
+        accessibilityLabel={tr('onboarding.languageSearch')}
+        autoCorrect={false}
+        autoCapitalize="none"
+        returnKeyType="search"
+        style={s.langSearchInput}
+      />
+      {value.length > 0 && (
+        <Pressable onPress={() => onChange('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear">
+          <Ionicons name="close-circle" size={18} color={t.textMuted} />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function LanguageOption({
+  label,
+  detail,
+  region,
+  selected,
+  onPress,
+}: {
+  label: string;
+  detail: string;
+  region: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const s = useStyles();
   const t = useTheme();
   return (
@@ -523,11 +572,29 @@ function LanguageOption({ label, selected, onPress }: { label: string; selected:
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      accessibilityLabel={label}
-      style={({ pressed }) => [s.langOption, selected && s.langOptionOn, pressed && { opacity: 0.85 }]}
+      accessibilityLabel={detail === label ? label : `${label}, ${detail}`}
+      style={({ pressed }) => [s.langOption, selected && s.langOptionOn, pressed && !selected && { backgroundColor: t.surfacePressed }]}
     >
-      <Text style={s.langLabel}>{label}</Text>
-      <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={26} color={selected ? t.primary : t.textMuted} />
+      <View style={[s.langBadge, selected && s.langBadgeOn]}>
+        <Text style={[s.langBadgeText, selected && { color: t.primaryText }]}>{region}</Text>
+      </View>
+      <View style={s.langText}>
+        <Text style={s.langLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {detail !== label && (
+          <Text style={s.langDetail} numberOfLines={1}>
+            {detail}
+          </Text>
+        )}
+      </View>
+      {selected ? (
+        <View style={s.langCheck}>
+          <Ionicons name="checkmark" size={15} color={t.onPrimary} />
+        </View>
+      ) : (
+        <View style={s.langRing} />
+      )}
     </Pressable>
   );
 }
@@ -590,20 +657,55 @@ const useStyles = makeStyles((t) =>
     title: { ...type.hero, color: t.text },
     subtitle: { ...type.body, color: t.textSecondary },
 
-    langList: { gap: 12 },
+    langList: { gap: 10 },
+    langSearch: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 48,
+      paddingHorizontal: 16,
+      marginBottom: 14,
+      borderRadius: 14,
+      backgroundColor: t.surfaceMuted,
+    },
+    langSearchInput: { flex: 1, minWidth: 0, height: '100%', ...type.callout, color: t.text, outlineStyle: 'none' } as any,
+    langEmpty: { ...type.callout, color: t.textSecondary, textAlign: 'center', paddingVertical: 24 },
     langOption: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: 14,
       minHeight: 64,
-      paddingHorizontal: 20,
-      borderRadius: 18,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 16,
       backgroundColor: t.surface,
-      borderWidth: 2,
-      borderColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: t.border,
     },
-    langOptionOn: { borderColor: t.primary },
-    langLabel: { ...type.subheading, fontSize: 18, color: t.text },
+    langOptionOn: { borderColor: t.primary, backgroundColor: t.primarySoft },
+    langBadge: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.surfaceMuted,
+    },
+    langBadgeOn: { backgroundColor: 'rgba(255,90,31,0.18)' },
+    langBadgeText: { ...type.caption, fontFamily: type.label.fontFamily, color: t.textSecondary, letterSpacing: 0.6 },
+    langText: { flex: 1, minWidth: 0, gap: 2 },
+    langLabel: { ...type.subheading, color: t.text },
+    langDetail: { ...type.caption, color: t.textSecondary },
+    langCheck: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.primary,
+    },
+    langRing: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: t.textMuted },
 
     rules: { marginBottom: 8 },
     ruleRow: { flexDirection: 'row', gap: 16, paddingVertical: 18 },

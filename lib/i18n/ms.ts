@@ -137,6 +137,8 @@ export const ms: Dictionary = {
   onboarding: {
     languageTitle: 'Pilih bahasa anda',
     languageSubtitle: 'Anda boleh menukarnya kemudian dalam Tetapan.',
+    languageSearch: "Cari bahasa",
+    languageNoMatch: "Tiada bahasa ditemui",
     otherGender: 'Lain-lain',
     addOther: '+ Lain-lain',
     otherSport: 'Lain-lain',
@@ -255,6 +257,9 @@ export const ms: Dictionary = {
     pass: 'Langkau',
     like: 'Ajak main',
     super: 'Jemputan super',
+    skipShort: "Langkau",
+    boostShort: "Boost",
+    inviteShort: "Ajak bersukan",
     moreInfo: 'Buka profil penuh',
     lookingFor: 'Mencari pasangan',
     photoVerified: 'Foto disahkan',

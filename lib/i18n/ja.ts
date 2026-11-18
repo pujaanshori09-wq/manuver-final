@@ -137,6 +137,8 @@ export const ja: Dictionary = {
   onboarding: {
     languageTitle: '言語を選択',
     languageSubtitle: 'あとから設定で変更できます。',
+    languageSearch: "言語を検索",
+    languageNoMatch: "該当する言語がありません",
     otherGender: 'その他',
     addOther: '+ その他',
     otherSport: 'その他',
@@ -255,6 +257,9 @@ export const ja: Dictionary = {
     pass: 'パス',
     like: 'プレーに誘う',
     super: 'スーパー招待',
+    skipShort: "スキップ",
+    boostShort: "ブースト",
+    inviteShort: "スポーツに誘う",
     moreInfo: 'プロフィールを見る',
     lookingFor: '相手を探しています',
     photoVerified: '写真認証済み',

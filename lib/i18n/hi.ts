@@ -137,6 +137,8 @@ export const hi: Dictionary = {
   onboarding: {
     languageTitle: 'अपनी भाषा चुनें',
     languageSubtitle: 'आप इसे बाद में सेटिंग्स में बदल सकते हैं।',
+    languageSearch: "भाषा खोजें",
+    languageNoMatch: "कोई भाषा नहीं मिली",
     otherGender: 'अन्य',
     addOther: '+ अन्य',
     otherSport: 'अन्य',
@@ -255,6 +257,9 @@ export const hi: Dictionary = {
     pass: 'छोड़ें',
     like: 'खेलने का न्योता',
     super: 'सुपर न्योता',
+    skipShort: "छोड़ें",
+    boostShort: "बूस्ट",
+    inviteShort: "खेलने बुलाएँ",
     moreInfo: 'पूरी प्रोफ़ाइल खोलें',
     lookingFor: 'साथी ढूँढ रहे हैं',
     photoVerified: 'फ़ोटो सत्यापित',

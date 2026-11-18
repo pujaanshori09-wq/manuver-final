@@ -21,20 +21,20 @@ import { ms } from './ms';
  * Arabic waits for right-to-left layout support.
  */
 export const LANGUAGES = [
-  { code: 'en', native: 'English' },
-  { code: 'id', native: 'Bahasa Indonesia' },
-  { code: 'zh', native: '中文（简体）' },
-  { code: 'es', native: 'Español' },
-  { code: 'hi', native: 'हिन्दी' },
-  { code: 'pt', native: 'Português' },
-  { code: 'ru', native: 'Русский' },
-  { code: 'ja', native: '日本語' },
-  { code: 'de', native: 'Deutsch' },
-  { code: 'fr', native: 'Français' },
-  { code: 'ko', native: '한국어' },
-  { code: 'vi', native: 'Tiếng Việt' },
-  { code: 'th', native: 'ไทย' },
-  { code: 'ms', native: 'Bahasa Melayu' },
+  { code: 'en', native: 'English', english: 'English', region: 'US' },
+  { code: 'id', native: 'Bahasa Indonesia', english: 'Indonesian', region: 'ID' },
+  { code: 'zh', native: '中文（简体）', english: 'Chinese (Simplified)', region: 'CN' },
+  { code: 'es', native: 'Español', english: 'Spanish', region: 'ES' },
+  { code: 'hi', native: 'हिन्दी', english: 'Hindi', region: 'IN' },
+  { code: 'pt', native: 'Português', english: 'Portuguese', region: 'BR' },
+  { code: 'ru', native: 'Русский', english: 'Russian', region: 'RU' },
+  { code: 'ja', native: '日本語', english: 'Japanese', region: 'JP' },
+  { code: 'de', native: 'Deutsch', english: 'German', region: 'DE' },
+  { code: 'fr', native: 'Français', english: 'French', region: 'FR' },
+  { code: 'ko', native: '한국어', english: 'Korean', region: 'KR' },
+  { code: 'vi', native: 'Tiếng Việt', english: 'Vietnamese', region: 'VN' },
+  { code: 'th', native: 'ไทย', english: 'Thai', region: 'TH' },
+  { code: 'ms', native: 'Bahasa Melayu', english: 'Malay', region: 'MY' },
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number]['code'];

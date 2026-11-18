@@ -135,6 +135,8 @@ export const en = {
   onboarding: {
     languageTitle: "Choose your language",
     languageSubtitle: "You can change it later in Settings.",
+    languageSearch: "Search language",
+    languageNoMatch: "No matching language",
     otherGender: "Other",
     addOther: "+ Other",
     otherSport: "Other",
@@ -253,6 +255,9 @@ export const en = {
     pass: 'Pass',
     like: 'Invite to play',
     super: 'Super invite',
+    skipShort: "Skip",
+    boostShort: "Boost",
+    inviteShort: "Invite to Sport",
     moreInfo: 'Open full profile',
     lookingFor: 'Looking for a partner',
     photoVerified: 'Photo verified',

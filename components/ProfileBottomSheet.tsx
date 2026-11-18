@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -207,7 +207,7 @@ function Sheet({ profile, onClose, onSwipeAction }: ProfileBottomSheetProps & { 
           <View style={s.likeClip}>
             <GlossFill />
           </View>
-          <MaterialIcons name="directions-run" size={34} color="#FFFFFF" />
+          <MaterialCommunityIcons name="handshake-outline" size={32} color="#FFFFFF" />
         </Pressable>
       </View>
     </View>

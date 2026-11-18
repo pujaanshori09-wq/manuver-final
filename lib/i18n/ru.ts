@@ -137,6 +137,8 @@ export const ru: Dictionary = {
   onboarding: {
     languageTitle: 'Выберите язык',
     languageSubtitle: 'Его можно изменить позже в настройках.',
+    languageSearch: "Поиск языка",
+    languageNoMatch: "Язык не найден",
     otherGender: 'Другое',
     addOther: '+ Другое',
     otherSport: 'Другое',
@@ -255,6 +257,9 @@ export const ru: Dictionary = {
     pass: 'Пропустить',
     like: 'Позвать играть',
     super: 'Суперприглашение',
+    skipShort: "Пропустить",
+    boostShort: "Буст",
+    inviteShort: "Позвать",
     moreInfo: 'Открыть профиль',
     lookingFor: 'Ищет партнёра',
     photoVerified: 'Фото подтверждено',

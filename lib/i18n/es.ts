@@ -137,6 +137,8 @@ export const es: Dictionary = {
   onboarding: {
     languageTitle: 'Elige tu idioma',
     languageSubtitle: 'Puedes cambiarlo luego en Ajustes.',
+    languageSearch: "Buscar idioma",
+    languageNoMatch: "No se encontró ningún idioma",
     otherGender: 'Otro',
     addOther: '+ Otro',
     otherSport: 'Otro',
@@ -255,6 +257,9 @@ export const es: Dictionary = {
     pass: 'Paso',
     like: 'Invitar a jugar',
     super: 'Súper invitación',
+    skipShort: "Saltar",
+    boostShort: "Boost",
+    inviteShort: "Invitar",
     moreInfo: 'Ver perfil completo',
     lookingFor: 'Busca compañero',
     photoVerified: 'Foto verificada',

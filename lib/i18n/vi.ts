@@ -137,6 +137,8 @@ export const vi: Dictionary = {
   onboarding: {
     languageTitle: 'Chọn ngôn ngữ',
     languageSubtitle: 'Bạn có thể đổi sau trong Cài đặt.',
+    languageSearch: "Tìm ngôn ngữ",
+    languageNoMatch: "Không tìm thấy ngôn ngữ",
     otherGender: 'Khác',
     addOther: '+ Khác',
     otherSport: 'Khác',
@@ -255,6 +257,9 @@ export const vi: Dictionary = {
     pass: 'Bỏ qua',
     like: 'Mời chơi',
     super: 'Lời mời đặc biệt',
+    skipShort: "Bỏ qua",
+    boostShort: "Boost",
+    inviteShort: "Rủ chơi",
     moreInfo: 'Xem hồ sơ đầy đủ',
     lookingFor: 'Đang tìm bạn chơi',
     photoVerified: 'Ảnh đã xác minh',

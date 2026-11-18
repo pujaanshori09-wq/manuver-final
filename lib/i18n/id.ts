@@ -137,6 +137,8 @@ export const id: Dictionary = {
   onboarding: {
     languageTitle: "Pilih bahasamu",
     languageSubtitle: "Bisa diubah nanti di Pengaturan.",
+    languageSearch: "Cari bahasa",
+    languageNoMatch: "Bahasa tidak ditemukan",
     otherGender: "Lainnya",
     addOther: "+ Lainnya",
     otherSport: "Lainnya",
@@ -255,6 +257,9 @@ export const id: Dictionary = {
     pass: 'Lewati',
     like: 'Ajak main',
     super: 'Super ajak',
+    skipShort: "Lewati",
+    boostShort: "Boost",
+    inviteShort: "Ajak Olahraga",
     moreInfo: 'Buka profil lengkap',
     lookingFor: 'Cari partner',
     photoVerified: 'Foto terverifikasi',

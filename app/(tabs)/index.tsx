@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -195,8 +195,8 @@ function Discover() {
     }
   };
 
-  // Action buttons float over the bottom of the card, just above the tab bar.
-  const actionsBottom = tabInset - 4;
+  // Action buttons (with their labels underneath) float over the bottom of the card, just above the tab bar.
+  const actionsBottom = tabInset + 2;
   const ACTION_SIZE = 66;
 
   return (
@@ -277,7 +277,7 @@ function Discover() {
                       <ProfileCardSummary
                         profile={currentProfile}
                         heroHeight={deckHeight}
-                        heroBottomInset={ACTION_SIZE + 52}
+                        heroBottomInset={ACTION_SIZE + 84}
                         onExpandPress={() => setDetailSheetVisible(true)}
                       />
                     )}
@@ -295,35 +295,26 @@ function Discover() {
 
           {!loading && currentProfile && (
             <View pointerEvents="box-none" style={[s.actions, { bottom: actionsBottom }]}>
-              <Pressable
-                onPress={() => triggerSwipe('left')}
-                accessibilityRole="button"
-                accessibilityLabel={tr('discover.pass')}
-                style={({ pressed }) => [s.action, s.passBtn, pressed && s.pressed]}
-              >
-                <Ionicons name="close" size={34} color="#FFFFFF" />
-              </Pressable>
+              <ActionButton label={tr('discover.skipShort')} a11y={tr('discover.pass')} onPress={() => triggerSwipe('left')} style={s.skipBtn}>
+                <Ionicons name="close" size={30} color="#FFFFFF" />
+              </ActionButton>
 
-              <Pressable
-                onPress={() => triggerSwipe('up')}
-                accessibilityRole="button"
-                accessibilityLabel={tr('discover.super')}
-                style={({ pressed }) => [s.superBtn, pressed && s.pressed]}
-              >
-                <Ionicons name="flash" size={22} color={t.primaryText} />
-              </Pressable>
+              <ActionButton label={tr('discover.boostShort')} a11y={tr('discover.super')} onPress={() => triggerSwipe('up')} style={s.boostBtn}>
+                <Ionicons name="flash" size={22} color={t.primary} />
+              </ActionButton>
 
-              <Pressable
+              <ActionButton
+                label={tr('discover.inviteShort')}
+                a11y={tr('discover.like')}
                 onPress={() => triggerSwipe('right')}
-                accessibilityRole="button"
-                accessibilityLabel={tr('discover.like')}
-                style={({ pressed }) => [s.action, s.likeBtn, pressed && s.pressed]}
+                style={s.inviteBtn}
+                primary
               >
-                <View style={s.likeClip}>
+                <View style={s.inviteClip}>
                   <GlossFill />
                 </View>
-                <MaterialIcons name="directions-run" size={36} color="#FFFFFF" />
-              </Pressable>
+                <MaterialCommunityIcons name="handshake-outline" size={34} color="#FFFFFF" />
+              </ActionButton>
             </View>
           )}
         </View>
@@ -355,6 +346,39 @@ function Discover() {
         }}
       />
     </>
+  );
+}
+
+/** A round Discover action with its name underneath, so every button says what it does. */
+function ActionButton({
+  label,
+  a11y,
+  onPress,
+  style,
+  primary,
+  children,
+}: {
+  label: string;
+  a11y: string;
+  onPress: () => void;
+  style: object;
+  primary?: boolean;
+  children: React.ReactNode;
+}) {
+  const s = useStyles();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} style={s.actionCol}>
+      {({ pressed }) => (
+        <>
+          <View style={s.actionSlot}>
+            <View style={[style, pressed && s.pressed]}>{children}</View>
+          </View>
+          <Text style={[s.actionLabel, primary && s.actionLabelPrimary]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {label}
+          </Text>
+        </>
+      )}
+    </Pressable>
   );
 }
 
@@ -393,38 +417,52 @@ const useStyles = makeStyles((t) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: space.xl,
+      gap: space.xs,
       zIndex: 30,
     },
-    action: {
-      width: 66,
-      height: 66,
-      borderRadius: 33,
+    actionCol: { width: 96, alignItems: 'center' },
+    actionSlot: { height: 72, alignItems: 'center', justifyContent: 'center' },
+    actionLabel: {
+      marginTop: 6,
+      maxWidth: 96,
+      fontFamily: fonts.bodyBold,
+      fontSize: 12,
+      lineHeight: 16,
+      color: 'rgba(255,255,255,0.86)',
+      textShadowColor: 'rgba(0,0,0,0.6)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
+    actionLabelPrimary: { fontFamily: fonts.bodyBlack, color: '#FFFFFF' },
+    skipBtn: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    passBtn: {
-      backgroundColor: 'rgba(22,22,22,0.92)',
+      backgroundColor: 'rgba(12,12,12,0.6)',
       borderWidth: 1.5,
-      borderColor: 'rgba(255,255,255,0.18)',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.4,
-      shadowRadius: 12,
-      elevation: 6,
+      borderColor: 'rgba(255,255,255,0.55)',
     },
-    superBtn: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+    boostBtn: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(22,22,22,0.92)',
-      borderWidth: 1.5,
-      borderColor: 'rgba(255,255,255,0.18)',
+      backgroundColor: 'rgba(28,28,28,0.92)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
     },
-    likeBtn: { ...glossShadow },
-    likeClip: { ...StyleSheet.absoluteFill, borderRadius: 33, overflow: 'hidden' },
+    inviteBtn: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...glossShadow,
+    },
+    inviteClip: { ...StyleSheet.absoluteFill, borderRadius: 36, overflow: 'hidden' },
     pressed: { transform: [{ scale: 0.94 }] },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl },
     emptyTitle: { ...type.title, color: t.text, textAlign: 'center', marginTop: -space.xl },
