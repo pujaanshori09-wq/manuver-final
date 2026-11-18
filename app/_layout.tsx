@@ -96,6 +96,10 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // Render nothing (the splash stays up) until the fonts are ready. Android measures text once with
+  // the fallback font and does not re-measure when the brand font arrives, which clips labels.
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <RootErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
