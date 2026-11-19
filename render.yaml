@@ -1,0 +1,54 @@
+# Render Blueprint for the Manuver API (docs/DEPLOY.md → "Render").
+# Render → New → Blueprint → pick this repo. It builds server/Dockerfile, which applies database
+# migrations on every start. Values marked `sync: false` are asked once, when the Blueprint is
+# first created; change them later under the service's Environment tab.
+services:
+  - type: web
+    name: manuver-api
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    region: singapore
+    # Free sleeps after 15 idle minutes (about a minute to wake). Pick a paid plan before launch.
+    plan: free
+    healthCheckPath: /health
+    # Deploy only commits whose GitHub checks (CI) passed.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render generates two different random secrets.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Neon: direct address (no "-pooler"), ending in ?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # https://manuver-api.onrender.com, or your own domain
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: OAUTH_ORIGINS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Photos: Supabase Storage (free). Values from Supabase → Project Settings → Storage → S3 Connection.
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      - key: S3_BUCKET
+        value: manuver-photos
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PUBLIC_URL
+        sync: false

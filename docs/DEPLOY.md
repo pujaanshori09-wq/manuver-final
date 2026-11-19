@@ -68,6 +68,18 @@ Generate a secret: `node -e "console.log(require('crypto').randomBytes(48).toStr
 The server refuses to start in production with the example secrets, two equal secrets, a plain-http
 `PUBLIC_BASE_URL`, no `RESEND_API_KEY`, or an incomplete bucket setup, and lists what is wrong.
 
+## Render (ready-made: `render.yaml`)
+1. render.com → sign in with GitHub → **New** → **Blueprint** → pick `manuver-final`.
+2. Render reads `render.yaml` (service `manuver-api`, Docker, Singapore, free plan, health check `/health`,
+   deploys only commits whose CI passed). The two JWT secrets are generated for you.
+3. It asks once for: `DATABASE_URL`, `PUBLIC_BASE_URL` and `OAUTH_ORIGINS` (both `https://manuver-api.onrender.com`,
+   or the address Render shows if that name is taken), `RESEND_API_KEY`, `EMAIL_FROM`, and the Supabase Storage values
+   `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`. Later changes: the
+   service's **Environment** tab (Render only asks during the first Blueprint setup).
+4. After the deploy turns green, from `server/`: `npm run smoke -- https://manuver-api.onrender.com`.
+   It signs up a throwaway account, uploads a photo, checks it is public and GPS-free, then deletes the account.
+5. Free plan: sleeps after 15 idle minutes and takes about a minute to wake. Switch the plan before launch.
+
 ## 3. First deploy
 1. Create the database and the bucket; set the variables above.
 2. Deploy the `server/` folder (Dockerfile). The first start creates every table.
