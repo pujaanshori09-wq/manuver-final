@@ -106,21 +106,21 @@ export function ListRow({
 
 const useStyles = makeStyles((t) =>
   StyleSheet.create({
-    section: { marginTop: 28 },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, paddingHorizontal: 4 },
+    section: { marginTop: 16 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6, paddingHorizontal: 4 },
     title: { ...type.subheading, color: t.text },
     group: {
       backgroundColor: t.surface,
       borderRadius: radius.card + 6,
       overflow: 'hidden',
     },
-    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.border, marginLeft: 20 },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.border, marginLeft: 16 },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      minHeight: 56,
-      paddingHorizontal: 20,
-      paddingVertical: 14,
+      minHeight: 46,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       gap: 12,
     },
     icon: { marginRight: 2 },

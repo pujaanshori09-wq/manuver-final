@@ -5,7 +5,7 @@
  */
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { supabase } from './supabase';
+import { meApi } from './api';
 
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
@@ -68,13 +68,40 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 }
 
-export async function savePushToken(userId: string, token: string) {
+/** The token this phone registered with the server, so sign-out can take it back. */
+let registered: string | null = null;
+
+/** Asks for permission once and tells the server where to send this person's pushes. */
+export async function syncPushToken() {
+  const token = await registerForPushNotifications();
+  if (!token) return;
   try {
-    await supabase
-      .from('profiles')
-      .update({ push_token: token })
-      .eq('id', userId);
+    await meApi.setPushToken(token);
+    registered = token;
   } catch (e) {
-    console.error('[PushNotif] Failed saving push token:', e);
+    console.log('[PushNotif] Could not save the push token:', e);
+  }
+}
+
+/** Before signing out: this phone must stop getting the old account's pushes. */
+export async function forgetPushToken() {
+  if (!registered) return;
+  const token = registered;
+  registered = null;
+  await meApi.removePushToken(token).catch(() => {});
+}
+
+/** Tapping a match or message push opens that chat. Returns the unsubscribe function. */
+export async function listenForPushTaps(open: (matchId: string) => void): Promise<() => void> {
+  if (Platform.OS === 'web') return () => {};
+  try {
+    const Notifications = await import('expo-notifications');
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+      const data = r.notification.request.content.data as { matchId?: unknown } | undefined;
+      if (typeof data?.matchId === 'string') open(data.matchId);
+    });
+    return () => sub.remove();
+  } catch {
+    return () => {};
   }
 }

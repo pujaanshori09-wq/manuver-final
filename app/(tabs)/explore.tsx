@@ -6,27 +6,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Chip, GlossFill, glossShadow, IconButton, useTabBarInset } from '@/components/ui';
-import { useT } from '@/lib/i18n';
+import { useLanguage, useT } from '@/lib/i18n';
 import ActivityFeed from '../../components/ActivityFeed';
-import { supabase } from '../../lib/supabase';
+import { eventsApi } from '@/lib/api';
+import { eventDisplay, type EventDisplay } from '@/lib/events';
 
 import { useTheme, makeStyles, type Theme, fonts, radius, space, type } from '@/lib/theme';
 const CATEGORIES = ['Semua', 'Running', 'Badminton', 'Gym', 'Futsal', 'Basket', 'Tennis'];
 
-interface SportEvent {
-  id: string;
-  title: string;
-  organizer: string;
-  date: string;
-  location: string;
-  city: string;
-  category: string;
-  type: 'Kompetisi' | 'Fun Run' | 'Open Tournament' | 'Komunitas' | 'Festival';
-  participants: string;
-  image: string;
-  isFeatured?: boolean;
-  price: string;
-}
+type SportEvent = EventDisplay;
 
 
 
@@ -34,6 +22,7 @@ export default function ExploreScreen() {
   const t = useTheme();
   const styles = useStylesTheme();
   const tr = useT();
+  const { language } = useLanguage();
   const tabInset = useTabBarInset();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,21 +35,15 @@ export default function ExploreScreen() {
 
   const fetchEvents = React.useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('events').select('*');
-      if (error) throw error;
-      // map backend keys to frontend keys if they differ
-      const formatted = (data || []).map((e: any) => ({
-        ...e,
-        image: e.image_url, // map image_url to image
-      }));
-      setEvents(formatted);
+      // Approved upcoming events (plus my own while they wait for review), featured first.
+      setEvents((await eventsApi.list()).map((e) => eventDisplay(e, language, tr('sheets.free'))));
     } catch (e) {
       console.error('Error fetching events:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [language, tr]);
 
   React.useEffect(() => {
     fetchEvents();
@@ -218,7 +201,7 @@ export default function ExploreScreen() {
                 <View style={styles.eventInfo}>
                   <View style={styles.eventTopRow}>
                     <View style={styles.typeBadge}>
-                      <Text style={styles.typeBadgeText}>{event.type}</Text>
+                      <Text style={styles.typeBadgeText}>{event.status === 'PENDING' ? tr('event.notVerified') : event.type}</Text>
                     </View>
                     <Text style={styles.eventPrice}>{event.price}</Text>
                   </View>

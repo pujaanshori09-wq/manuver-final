@@ -46,6 +46,8 @@ const body = (over: Record<string, unknown> = {}) => ({
   movingSec: 330,
   distanceM: 1000,
   polyline: encode(LINE),
+  // One point every 3.3 s: 1 km in 330 s, an easy 5:30/km run.
+  pointTimes: LINE.map((_, i) => Math.round(i * 3.3)),
   showOnProfile: true,
   ...over,
 });
@@ -84,11 +86,21 @@ describe('activities', () => {
 
   it('accepts a long route above the default body limit', async () => {
     const me = await player('Me');
-    // ~20k points zig-zagging: well over 100 KB once encoded.
-    const long: LatLng[] = Array.from({ length: 20_000 }, (_, i) => [-6.9 + (i % 2) * 0.02, 107.6 + (i % 3) * 0.02]);
+    // A long ride, a point every 2 s moving ~39 m (~70 km/h, under the ride limit):
+    // well over 100 KB once encoded, plus one time per point.
+    const N = 28_000;
+    const long: LatLng[] = Array.from({ length: N }, (_, i) => [-6.9 + i * 0.00025, 107.6 + i * 0.00025]);
     const polyline = encode(long);
     expect(polyline.length).toBeGreaterThan(100_000);
-    expect((await save(me, { polyline })).status).toBe(201);
+    const res = await save(me, {
+      type: 'RIDE',
+      polyline,
+      pointTimes: long.map((_, i) => i * 2),
+      endedAt: '2026-11-18T16:00:00.000Z',
+      movingSec: 50_000,
+      distanceM: 100_000,
+    });
+    expect(res.status).toBe(201);
   });
 
   it('rejects too short, impossible or broken recordings', async () => {

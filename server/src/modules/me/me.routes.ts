@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { badRequest } from '../../lib/errors.js';
 import { currentUserId, requireAuth } from '../../middleware/auth.js';
+import { photoLimit } from '../../middleware/rateLimits.js';
 import { validate } from '../../middleware/validate.js';
 import {
   LocationBody,
@@ -10,9 +11,11 @@ import {
   PhotoOrderBody,
   ProfilePatchBody,
   PromptsBody,
+  PushTokenBody,
   SportsBody,
 } from './me.schemas.js';
 import * as me from './me.service.js';
+import { removePushToken, savePushToken } from '../../lib/push.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -48,7 +51,7 @@ meRouter.post('/onboarding', validate({ body: OnboardingBody }), async (req, res
   res.json(await me.completeOnboarding(currentUserId(req), req.body));
 });
 
-meRouter.post('/photos', (req, res, next) => {
+meRouter.post('/photos', photoLimit, (req, res, next) => {
   upload.single('photo')(req, res, (err: unknown) => {
     if (err instanceof multer.MulterError) {
       next(
@@ -76,6 +79,17 @@ meRouter.delete('/photos/:id', validate({ params: PhotoIdParams }), async (req, 
 
 meRouter.put('/prompts', validate({ body: PromptsBody }), async (req, res) => {
   res.json(await me.replacePrompts(currentUserId(req), req.body.prompts));
+});
+
+// This phone's Expo push token. The app sends it after sign-in and removes it before signing out.
+meRouter.put('/push-token', validate({ body: PushTokenBody }), async (req, res) => {
+  await savePushToken(currentUserId(req), req.body.token);
+  res.status(204).end();
+});
+
+meRouter.delete('/push-token', validate({ body: PushTokenBody }), async (req, res) => {
+  await removePushToken(currentUserId(req), req.body.token);
+  res.status(204).end();
 });
 
 meRouter.delete('/', async (req, res) => {

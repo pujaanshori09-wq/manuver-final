@@ -27,6 +27,7 @@ import RadarAnimation from '../../components/RadarAnimation';
 import SwipeCard, { SwipeCardRef } from '../../components/SwipeCard';
 import { useLocationManager } from '../../hooks/useLocationManager';
 import { useProfiles } from '../../hooks/useProfiles';
+import { QuotaSheet } from '@/components/QuotaSheet';
 import { meApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -67,6 +68,8 @@ function Discover() {
     fetchProfiles,
     handleSwipeComplete,
     closeMatchModal,
+    swipeLimit,
+    closeSwipeLimit,
   } = useProfiles();
 
   // Location Manager
@@ -287,6 +290,8 @@ function Discover() {
         myAvatarUrl={myAvatarUrl}
         onClose={closeMatchModal}
       />
+
+      <QuotaSheet limit={swipeLimit} onClose={closeSwipeLimit} />
 
       <ProfileBottomSheet
         visible={detailSheetVisible}

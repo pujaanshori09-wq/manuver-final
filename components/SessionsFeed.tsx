@@ -6,7 +6,9 @@ import CreateSessionSheet from './CreateSessionSheet';
 import DaruratKurang1Board from './DaruratKurang1Board';
 import { Button, Chip, GlossFill, glossShadow, useTabBarInset } from '@/components/ui';
 import { useLanguage, useT } from '@/lib/i18n';
-import { supabase } from '../lib/supabase';
+import { assetUrl, sessionsApi, type OpenSession } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { apiErrorMessage } from '@/lib/api/errors';
 
 import { useTheme, makeStyles, type Theme, fonts, radius, space, type } from '@/lib/theme';
 export interface SessionItem {
@@ -48,6 +50,27 @@ const SPORT_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   cycling: 'bicycle-outline',
 };
 
+/** Server session → the shape the cards render. */
+const GENDER = { ALL: 'any', MEN: 'male', WOMEN: 'female' } as const;
+function toItem(s: OpenSession): SessionItem {
+  return {
+    id: s.id,
+    creator_id: s.creator.id,
+    creator_name: s.creator.name,
+    creator_avatar: assetUrl(s.creator.photoUrl) ?? DEFAULT_AVATAR,
+    sport: s.sport,
+    title: s.title,
+    venue_name: s.venueName,
+    scheduled_at: s.scheduledAt,
+    slots_total: s.slotsTotal,
+    slots_filled: s.slotsFilled,
+    gender_pref: GENDER[s.genderPref],
+    skill_note: s.skillNote,
+    status: s.status === 'FULL' ? 'full' : 'open',
+    is_joined: s.isJoined,
+  };
+}
+
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
 
@@ -68,93 +91,26 @@ export default function SessionsFeed() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [sheetVisible, setSheetVisible] = useState<boolean>(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
 
-  const fetchCurrentUser = useCallback(async () => {
-    try {
-      const { data } = await supabase.auth.getUser();
-      setCurrentUserId(data?.user?.id ?? null);
-    } catch {
-      setCurrentUserId(null);
-    }
-  }, []);
+  const { me } = useAuth();
+  const currentUserId = me?.id ?? null;
 
   const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: authData } = await supabase.auth.getUser();
-      const userId = authData?.user?.id ?? currentUserId;
-
-      const { data, error } = await supabase
-        .from('open_sessions')
-        .select(`
-          id,
-          creator_id,
-          sport,
-          title,
-          venue_name,
-          scheduled_at,
-          slots_total,
-          slots_filled,
-          gender_pref,
-          skill_note,
-          status,
-          profiles:creator_id (
-            nama,
-            foto_url
-          ),
-          session_participants (
-            user_id
-          )
-        `)
-        .order('scheduled_at', { ascending: true });
-
-      if (error || !data) {
-        setSessions([]);
-        return;
-      }
-
-      const formatted: SessionItem[] = data.map((item: any) => {
-        const creatorProfile = Array.isArray(item.profiles)
-          ? item.profiles[0]
-          : item.profiles;
-        const participants: any[] = item.session_participants || [];
-        const isJoined = userId
-          ? participants.some((p: any) => p.user_id === userId)
-          : false;
-
-        return {
-          id: item.id,
-          creator_id: item.creator_id,
-          creator_name: creatorProfile?.nama || '',
-          creator_avatar: creatorProfile?.foto_url || DEFAULT_AVATAR,
-          sport: item.sport,
-          title: item.title,
-          venue_name: item.venue_name,
-          scheduled_at: item.scheduled_at,
-          slots_total: item.slots_total,
-          slots_filled: item.slots_filled || 0,
-          gender_pref: item.gender_pref || 'any',
-          skill_note: item.skill_note,
-          status: item.status || 'open',
-          is_joined: isJoined,
-        };
-      });
-
-      setSessions(formatted);
+      setSessions((await sessionsApi.list()).map(toItem));
     } catch {
       setSessions([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentUserId]);
+  }, []);
 
   useEffect(() => {
-    fetchCurrentUser();
     fetchSessions();
-  }, [fetchCurrentUser, fetchSessions]);
+  }, [fetchSessions]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -169,24 +125,13 @@ export default function SessionsFeed() {
 
     try {
       setActionInProgressId(session.id);
-      if (session.is_joined) {
-        const { error } = await supabase
-          .from('session_participants')
-          .delete()
-          .match({ session_id: session.id, user_id: currentUserId });
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('session_participants')
-          .insert({ session_id: session.id, user_id: currentUserId });
-
-        if (error) throw error;
-      }
+      // The server checks the slots, the time and who may join.
+      if (session.is_joined) await sessionsApi.leave(session.id);
+      else await sessionsApi.join(session.id);
 
       fetchSessions();
     } catch (err: any) {
-      Alert.alert(tr('sessions.failedTitle'), err.message || tr('sessions.failedBody'));
+      Alert.alert(tr('sessions.failedTitle'), apiErrorMessage(err, tr));
     } finally {
       setActionInProgressId(null);
     }

@@ -129,8 +129,8 @@ export async function logout(refreshToken: string) {
 
 const googleAudiences = () => [...new Set([...env.GOOGLE_CLIENT_IDS, env.GOOGLE_CLIENT_ID].filter(Boolean))];
 
-/** Finds the account for a verified Google profile: by Google id, then by email (linking), else creates it. */
-async function accountForGoogle(payload: TokenPayload | undefined) {
+/** Finds the account for a verified Google profile: by Google id, then by email (linking), else creates it. Exported for tests. */
+export async function accountForGoogle(payload: TokenPayload | undefined) {
   if (!payload?.sub || !payload.email) throw unauthorized('invalid_google_token', 'Google sign-in failed');
   if (!payload.email_verified) throw unauthorized('google_email_unverified', 'Google email is not verified');
 
@@ -139,9 +139,20 @@ async function accountForGoogle(payload: TokenPayload | undefined) {
   if (byGoogle) return { id: byGoogle.id, isNewUser: false };
 
   // Link to an existing email account (Google has verified the address), or create one.
-  const byEmail = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  const byEmail = await prisma.user.findUnique({ where: { email }, select: { id: true, emailVerified: true } });
   if (byEmail) {
-    await prisma.user.update({ where: { id: byEmail.id }, data: { googleId: payload.sub, emailVerified: true } });
+    if (byEmail.emailVerified) {
+      await prisma.user.update({ where: { id: byEmail.id }, data: { googleId: payload.sub } });
+    } else {
+      // Nobody ever proved they own this address, so whoever set the password may not be the
+      // owner (someone can sign up with another person's email first). Google has now proved
+      // ownership: drop that password and sign out every device. The owner can set a new
+      // password later through "forgot password".
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: byEmail.id }, data: { googleId: payload.sub, emailVerified: true, passwordHash: null } }),
+        prisma.refreshToken.updateMany({ where: { userId: byEmail.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+      ]);
+    }
     return { id: byEmail.id, isNewUser: false };
   }
   const created = await prisma.user.create({

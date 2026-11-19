@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma.js';
 import { uploadRoot } from '../src/lib/storage.js';
@@ -10,9 +11,11 @@ afterAll(() => prisma.$disconnect());
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-// Smallest byte sequences that pass the server's signature check.
-const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 2)]);
+// Real (tiny) images: the server decodes and re-encodes every upload.
+const image = (width: number, height: number) =>
+  sharp({ create: { width, height, channels: 3, background: { r: 255, g: 90, b: 31 } } });
+const JPEG = await image(40, 30).jpeg().toBuffer();
+const PNG = await image(30, 40).png().toBuffer();
 
 const upload = (token: string, data = JPEG, type = 'image/jpeg', name = 'a.jpg') =>
   api().post('/v1/me/photos').set(auth(token)).attach('photo', data, { filename: name, contentType: type });
@@ -200,7 +203,7 @@ describe('photos', () => {
 
     const [first, second] = b.body.photos as { id: string; url: string; position: number }[];
     expect(first!.url).toMatch(/^\/uploads\/users\/.+\.jpg$/);
-    expect(second!.url).toMatch(/\.png$/);
+    expect(second!.url).toMatch(/\.jpg$/); // everything is stored as JPEG
 
     // The file is really served
     const served = await api().get(first!.url);
@@ -219,6 +222,27 @@ describe('photos', () => {
     expect(existsSync(path.join(uploadRoot, second!.url.replace('/uploads/', '')))).toBe(false);
   });
 
+  it('drops GPS and other metadata, turns photos upright and shrinks big ones', async () => {
+    const { accessToken } = await registerUser();
+    const phonePhoto = await image(3000, 2000)
+      .jpeg()
+      .withMetadata({ orientation: 6 })
+      .withExif({ IFD0: { Make: 'Phone' }, IFD3: { GPSLatitudeRef: 'S', GPSLatitude: '6/1 54/1 0/1' } })
+      .toBuffer();
+    const sent = await sharp(phonePhoto).metadata();
+    expect(sent.exif).toBeDefined();
+    expect(sent.orientation).toBe(6);
+
+    const res = await upload(accessToken, phonePhoto);
+    expect(res.status).toBe(201);
+    const stored = readFileSync(path.join(uploadRoot, res.body.photos[0].url.replace('/uploads/', '')));
+    const meta = await sharp(stored).metadata();
+    expect(meta.exif).toBeUndefined();
+    expect(meta.format).toBe('jpeg');
+    // Orientation 6 means "rotate 90°": stored upright, then fitted inside 1600 px.
+    expect([meta.width, meta.height]).toEqual([1067, 1600]);
+  });
+
   it('rejects files that are not really images', async () => {
     const { accessToken } = await registerUser();
     const res = await upload(accessToken, Buffer.from('<?php echo "hi"; ?>'.padEnd(64, ' ')), 'image/jpeg', 'evil.jpg');
@@ -227,6 +251,11 @@ describe('photos', () => {
 
     const wrongType = await upload(accessToken, JPEG, 'application/pdf', 'doc.pdf');
     expect(wrongType.status).toBe(400);
+
+    // Right signature, broken inside.
+    const broken = await upload(accessToken, Buffer.concat([JPEG.subarray(0, 20), Buffer.alloc(200, 7)]));
+    expect(broken.status).toBe(400);
+    expect(broken.body.error.code).toBe('unsupported_image');
   });
 
   it('allows at most 4 photos', async () => {

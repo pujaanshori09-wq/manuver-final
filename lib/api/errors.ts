@@ -25,6 +25,21 @@ const MESSAGES: Partial<Record<string, TKey>> = {
   oauth_expired: 'apiErrors.invalidOauthCode',
   origin_not_allowed: 'apiErrors.googleFailed',
   invalid_oauth_code: 'apiErrors.invalidOauthCode',
+  session_full: 'apiErrors.sessionFull',
+  session_closed: 'apiErrors.sessionClosed',
+  gender_mismatch: 'apiErrors.genderMismatch',
+  host_cannot_leave: 'apiErrors.hostCannotLeave',
+  too_many_sessions: 'apiErrors.tooManySessions',
+  sos_unavailable: 'apiErrors.sosUnavailable',
+  too_many_sos: 'apiErrors.tooManySos',
+  own_slot: 'sheets.ownSlot',
+  already_claimed: 'sheets.alreadyClaimed',
+  event_full: 'apiErrors.eventFull',
+  event_started: 'apiErrors.eventStarted',
+  too_many_pending: 'apiErrors.tooManyPending',
+  session_not_found: 'apiErrors.postGone',
+  sos_not_found: 'apiErrors.postGone',
+  event_not_found: 'apiErrors.postGone',
 };
 
 /** A user-facing message for any error thrown by the API client. */

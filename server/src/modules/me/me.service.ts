@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import type { z } from 'zod';
 import { badRequest, notFound, unauthorized } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -116,10 +117,25 @@ export async function replaceSports(userId: string, sports: z.infer<typeof Sport
   return getMe(userId);
 }
 
+/**
+ * Locations are stored on a grid of about 500 m. Discover shows distances rounded to whole
+ * kilometres, and with a coarse stored point nobody can work out where someone lives by
+ * measuring those distances from several made-up spots.
+ */
+export const LOCATION_GRID_DEG = 0.005; // ≈ 550 m north–south
+export const coarse = (v: number) => Math.round(v / LOCATION_GRID_DEG) * LOCATION_GRID_DEG;
+
+/** A new location is taken at most this often; requests in between are accepted but ignored. */
+export const LOCATION_EVERY_MS = 5 * 60_000;
+
 export async function updateLocation(userId: string, latitude: number, longitude: number) {
-  await prisma.profile.update({
-    where: { userId },
-    data: { latitude, longitude, locationUpdatedAt: new Date() },
+  const now = new Date();
+  await prisma.profile.updateMany({
+    where: {
+      userId,
+      OR: [{ locationUpdatedAt: null }, { locationUpdatedAt: { lte: new Date(now.getTime() - LOCATION_EVERY_MS) } }],
+    },
+    data: { latitude: coarse(latitude), longitude: coarse(longitude), locationUpdatedAt: now },
   });
 }
 
@@ -141,7 +157,7 @@ export async function completeOnboarding(userId: string, input: z.infer<typeof O
         termsAcceptedAt: now,
         onboardingCompletedAt: now,
         ...(input.location
-          ? { latitude: input.location.latitude, longitude: input.location.longitude, locationUpdatedAt: now }
+          ? { latitude: coarse(input.location.latitude), longitude: coarse(input.location.longitude), locationUpdatedAt: now }
           : {}),
       },
     }),
@@ -177,6 +193,26 @@ function sniffImage(buf: Buffer): string | null {
   return null;
 }
 
+/** Longest side of a stored photo, in pixels. */
+export const PHOTO_MAX_PX = 1600;
+
+/**
+ * Re-encodes every upload: turned upright, at most 1600 px, as JPEG, with all metadata dropped.
+ * Phone photos carry EXIF, often with the GPS position where they were taken (frequently home);
+ * sharp writes none of it unless asked to.
+ */
+async function cleanPhoto(input: Buffer): Promise<Buffer> {
+  try {
+    return await sharp(input, { failOn: 'error' })
+      .rotate()
+      .resize({ width: PHOTO_MAX_PX, height: PHOTO_MAX_PX, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    throw badRequest('unsupported_image', 'Upload a JPEG, PNG, WebP or HEIC photo');
+  }
+}
+
 export async function addPhoto(userId: string, file: { buffer: Buffer }) {
   const type = sniffImage(file.buffer);
   if (!type) throw badRequest('unsupported_image', 'Upload a JPEG, PNG, WebP or HEIC photo');
@@ -184,7 +220,8 @@ export async function addPhoto(userId: string, file: { buffer: Buffer }) {
   const count = await prisma.profilePhoto.count({ where: { userId } });
   if (count >= MAX_PHOTOS) throw badRequest('too_many_photos', `You can have up to ${MAX_PHOTOS} photos`);
 
-  const key = await storage.save(`users/${userId}`, file.buffer, EXT[type]!);
+  const clean = await cleanPhoto(file.buffer);
+  const key = await storage.save(`users/${userId}`, clean, 'jpg');
   try {
     await prisma.profilePhoto.create({ data: { userId, storageKey: key, position: count } });
   } catch (e) {

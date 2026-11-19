@@ -1,15 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import type { z } from 'zod';
 import { Prisma } from '../../generated/prisma/client.js';
-import { badRequest, notFound } from '../../lib/errors.js';
+import { AppError, badRequest, notFound } from '../../lib/errors.js';
 import { publicOrigin } from '../../lib/email.js';
-import { decode, encode, trimEnds } from '../../lib/polyline.js';
+import { decode, encode, privacyTrim } from '../../lib/polyline.js';
 import { prisma } from '../../lib/prisma.js';
 import { storage } from '../../lib/storage.js';
+import { checkSpeeds, speedProfile } from './speed.js';
 import type { CreateActivityBody, ListQuery, UpdateActivityBody } from './activities.schemas.js';
 
-/** Agreed privacy zone: others never see the first and last 200 m of a route. */
-const PRIVACY_M = 200;
 
 const select = {
   id: true,
@@ -48,7 +47,7 @@ function view(a: Row, viewerId: string) {
     movingSec: a.movingSec,
     distanceM: a.distanceM,
     showOnProfile: a.showOnProfile,
-    route: own ? a.polyline : encode(trimEnds(decode(a.polyline), PRIVACY_M)),
+    route: own ? a.polyline : encode(privacyTrim(decode(a.polyline))),
     // Only the owner learns whether a public link exists, and its address.
     ...(own
       ? { clientId: a.clientId, isPublic: a.isPublic, publicUrl: a.isPublic && a.publicSlug ? publicUrl(a.publicSlug) : null }
@@ -67,6 +66,29 @@ export async function create(userId: string, body: z.infer<typeof CreateActivity
     throw badRequest('invalid_route', 'The route could not be read');
   }
 
+  // One time per point, never going back, never past the end of the activity.
+  const times = body.pointTimes;
+  const elapsed = (new Date(body.endedAt).getTime() - new Date(body.startedAt).getTime()) / 1000;
+  if (
+    times.length !== points.length ||
+    times.some((t, i) => i > 0 && t < times[i - 1]!) ||
+    times[times.length - 1]! > elapsed + 5 ||
+    body.segmentStarts.some((i) => i >= points.length)
+  ) {
+    throw badRequest('invalid_route', 'The route timing could not be read');
+  }
+
+  // Faster than a human for this activity type: refuse (the app offers to change the type).
+  const problem = checkSpeeds({
+    type: body.type,
+    points,
+    times,
+    segmentStarts: body.segmentStarts,
+    distanceM: body.distanceM,
+    movingSec: body.movingSec,
+  });
+  if (problem) throw new AppError(422, problem, 'This recording is too fast for the chosen activity type');
+
   const data = {
     userId,
     clientId: body.clientId,
@@ -77,6 +99,8 @@ export async function create(userId: string, body: z.infer<typeof CreateActivity
     movingSec: body.movingSec,
     distanceM: body.distanceM,
     polyline: body.polyline,
+    pointTimes: times,
+    segmentStarts: body.segmentStarts,
     showOnProfile: body.showOnProfile,
   };
   try {
@@ -134,7 +158,10 @@ export async function listForUser(viewerId: string, userId: string, q: z.infer<t
 }
 
 export async function get(viewerId: string, id: string) {
-  const a = await prisma.activity.findUnique({ where: { id }, select });
+  const a = await prisma.activity.findUnique({
+    where: { id },
+    select: { ...select, pointTimes: true, segmentStarts: true },
+  });
   if (!a) throw notFound('activity_not_found', 'Activity not found');
   if (a.userId !== viewerId) {
     if (!a.showOnProfile) throw notFound('activity_not_found', 'Activity not found');
@@ -142,7 +169,8 @@ export async function get(viewerId: string, id: string) {
       throw notFound('activity_not_found', 'Activity not found');
     });
   }
-  return view(a, viewerId);
+  // Only the detail screen gets the speed chart; lists stay light.
+  return { ...view(a, viewerId), speed: speedProfile(decode(a.polyline), a.pointTimes, a.segmentStarts) };
 }
 
 export async function update(userId: string, id: string, patch: z.infer<typeof UpdateActivityBody>) {
@@ -234,6 +262,6 @@ export async function getPublic(slug: string) {
     movingSec: a.movingSec,
     distanceM: a.distanceM,
     firstName: (a.user.profile?.name ?? '').trim().split(/\s+/)[0] ?? '',
-    route: trimEnds(decode(a.polyline), PRIVACY_M),
+    route: privacyTrim(decode(a.polyline)),
   };
 }

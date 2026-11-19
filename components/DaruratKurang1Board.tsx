@@ -10,22 +10,12 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../app/_layout';
+import { sosApi, type SosPost } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api/errors';
 
 import { useTheme, makeStyles, type Theme, fonts, space } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
-interface EmergencySlot {
-  id: string;
-  creator_id: string;
-  sport: string;
-  venue_name: string;
-  play_time: string;
-  slots_needed: number;
-  fee_per_person: number;
-  note?: string;
-  creator?: { nama: string; foto_url: string };
-}
+type EmergencySlot = SosPost;
 
 interface Props {
   onOpenCreate: () => void;
@@ -35,22 +25,13 @@ export default function DaruratKurang1Board({ onOpenCreate }: Props) {
   const tr = useT();
   const th = useTheme();
   const styles = useStylesTheme();
-  const { session } = useAuth();
   const [slots, setSlots] = useState<EmergencySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
   const fetchActiveSlots = useCallback(async () => {
     try {
-      const nowIso = new Date().toISOString();
-      const { data, error } = await supabase
-        .from('emergency_slots')
-        .select('id, creator_id, sport, venue_name, play_time, slots_needed, fee_per_person, note, creator:creator_id (nama, foto_url)')
-        .eq('status', 'active')
-        .gt('expires_at', nowIso)
-        .order('play_time', { ascending: true })
-        .limit(10);
-      if (!error && data) setSlots(data as any);
+      setSlots(await sosApi.list());
     } catch (err) {
       console.log('Error fetching emergency slots:', err);
     } finally {
@@ -60,42 +41,28 @@ export default function DaruratKurang1Board({ onOpenCreate }: Props) {
 
   useEffect(() => {
     fetchActiveSlots();
-    const channel = supabase
-      .channel('emergency-slots-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_slots' }, () => fetchActiveSlots())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    // Spots go fast: check again every 30 seconds while the board is on screen.
+    const timer = setInterval(fetchActiveSlots, 30_000);
+    return () => clearInterval(timer);
   }, [fetchActiveSlots]);
 
   const handleClaim = async (slot: EmergencySlot) => {
-    if (!session) { Alert.alert(tr('sheets.heads'), tr('sheets.authBody')); return; }
-    if (slot.creator_id === session.user.id) { Alert.alert(tr('sheets.info'), tr('sheets.ownSlot')); return; }
-    Alert.alert(tr('sheets.joinSos'), tr('sheets.joinSosBody', { sport: slot.sport, venue: slot.venue_name, fee: slot.fee_per_person > 0 ? 'Rp ' + slot.fee_per_person.toLocaleString('id-ID') : tr('sheets.free') }),
+    if (slot.isMine) { Alert.alert(tr('sheets.info'), tr('sheets.ownSlot')); return; }
+    Alert.alert(tr('sheets.joinSos'), tr('sheets.joinSosBody', { sport: slot.sport, venue: slot.venueName, fee: slot.feePerPerson > 0 ? 'Rp ' + slot.feePerPerson.toLocaleString('id-ID') : tr('sheets.free') }),
       [{ text: tr('sheets.cancel'), style: 'cancel' }, {
         text: tr('sheets.letsGo'), onPress: async () => {
           setClaimingId(slot.id);
           try {
-            const { data, error } = await supabase.rpc('claim_emergency_slot', { p_slot_id: slot.id });
-            if (error) throw error;
-            if (data?.success) {
-              // The WhatsApp number is only revealed to whoever successfully claims the spot.
-              const wa: string | undefined = data.contact_wa;
-              Alert.alert(tr('sheets.joined'), tr('sheets.joinedBody', { venue: slot.venue_name }), [
+            // The WhatsApp number is only revealed to whoever successfully claims the spot.
+            const { contactWa: wa } = await sosApi.claim(slot.id);
+            {
+              Alert.alert(tr('sheets.joined'), tr('sheets.joinedBody', { venue: slot.venueName }), [
                 ...(wa ? [{ text: tr('sheets.chatWa'), onPress: () => { const p = wa.replace(/[^0-9]/g, ''); Linking.openURL('https://wa.me/' + (p.startsWith('0') ? '62' + p.slice(1) : p)); } }] : []),
                 { text: tr('sheets.ok') },
               ]);
               fetchActiveSlots();
-            } else {
-              const reason = data?.message;
-              Alert.alert(
-                tr('sheets.failed'),
-                reason === 'already_claimed' ? tr('sheets.alreadyClaimed')
-                  : reason === 'own_slot' ? tr('sheets.ownSlot')
-                  : tr('sheets.claimFailed'),
-              );
-              fetchActiveSlots();
             }
-          } catch (err: any) { Alert.alert(tr('sheets.error'), err.message); } finally { setClaimingId(null); }
+          } catch (err) { Alert.alert(tr('sheets.failed'), apiErrorMessage(err, tr)); fetchActiveSlots(); } finally { setClaimingId(null); }
         }
       }]);
   };
@@ -115,10 +82,10 @@ export default function DaruratKurang1Board({ onOpenCreate }: Props) {
             <View key={item.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.sportBadge}><Text style={styles.sportText}>{item.sport}</Text></View>
-                <View style={styles.slotCountBadge}><Text style={styles.slotCountText}>{tr('sheets.needs', { n: item.slots_needed })}</Text></View>
+                <View style={styles.slotCountBadge}><Text style={styles.slotCountText}>{tr('sheets.needs', { n: item.slotsLeft })}</Text></View>
               </View>
-              <Text style={styles.venueName} numberOfLines={1}>{item.venue_name}</Text>
-              <View style={styles.metaRow}><Ionicons name="time-outline" size={13} color={th.primary} /><Text style={styles.metaTime}>{formatTime(item.play_time)}</Text><Text style={styles.dot}>�</Text><Text style={styles.metaFee}>{item.fee_per_person > 0 ? 'Rp ' + item.fee_per_person.toLocaleString('id-ID') : 'Gratis'}</Text></View>
+              <Text style={styles.venueName} numberOfLines={1}>{item.venueName}</Text>
+              <View style={styles.metaRow}><Ionicons name="time-outline" size={13} color={th.primary} /><Text style={styles.metaTime}>{formatTime(item.playTime)}</Text><Text style={styles.dot}>·</Text><Text style={styles.metaFee}>{item.feePerPerson > 0 ? 'Rp ' + item.feePerPerson.toLocaleString('id-ID') : tr('sheets.free')}</Text></View>
               {item.note ? <Text style={styles.noteText} numberOfLines={1}>"{item.note}"</Text> : null}
               <TouchableOpacity accessibilityRole="button" style={styles.claimButton} onPress={() => handleClaim(item)} disabled={claimingId === item.id} activeOpacity={0.85}>
                 {claimingId === item.id ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.claimButtonText}>{tr('sheets.takeSpot')}</Text>}

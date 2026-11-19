@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { it } from 'vitest';
 import * as server from '../src/lib/polyline.js';
+import { SPEED_LIMITS as SERVER_LIMITS } from '../src/modules/activities/speed.js';
 import {
   decodeRoute,
   encodeRoute,
@@ -12,6 +13,8 @@ import {
   paceFromSpeed,
   recentSpeed,
   trimEnds,
+  privacyTrim,
+  SPEED_LIMITS,
   type TrackPoint,
 } from '../../lib/activity';
 
@@ -25,8 +28,8 @@ assert.equal(app, server.encode(track.map(([a, b]) => [a, b])));
 assert.deepEqual(decodeRoute(app), server.decode(app));
 assert.equal(decodeRoute(app).length, 101);
 
-// Repeated fixes at the same spot are not stored twice.
-assert.equal(encodeRoute([track[0]!, track[0]!, track[1]!]), encodeRoute([track[0]!, track[1]!]));
+// Every fix is kept (repeats too), so point i always lines up with time i.
+assert.equal(decodeRoute(encodeRoute([track[0]!, track[0]!, track[1]!])).length, 3);
 
 let meters = 0;
 for (let i = 1; i < track.length; i++) meters += metersBetween(track[i - 1]!, track[i]!);
@@ -46,5 +49,7 @@ assert.equal(formatPace(null), '–');
 const line = track.map(([a, b]) => [a, b] as [number, number]);
 assert.deepEqual(trimEnds(line), server.trimEnds(line, 200));
 assert.deepEqual(trimEnds(line.slice(0, 30)), []);
+assert.deepEqual(privacyTrim(line.slice(0, 36)), server.privacyTrim(line.slice(0, 36)));
+assert.deepEqual(SPEED_LIMITS, SERVER_LIMITS);
 
 });

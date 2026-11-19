@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { currentUserId, requireAuth } from '../../middleware/auth.js';
+import { activityLimit } from '../../middleware/rateLimits.js';
 import { validate } from '../../middleware/validate.js';
 import { ActivityIdParams, CreateActivityBody, ListQuery, UpdateActivityBody, UserIdParams } from './activities.schemas.js';
 import * as activities from './activities.service.js';
@@ -7,7 +8,7 @@ import * as activities from './activities.service.js';
 export const activitiesRouter = Router();
 activitiesRouter.use(requireAuth);
 
-activitiesRouter.post('/', validate({ body: CreateActivityBody }), async (req, res) => {
+activitiesRouter.post('/', activityLimit, validate({ body: CreateActivityBody }), async (req, res) => {
   res.status(201).json(await activities.create(currentUserId(req), req.body));
 });
 

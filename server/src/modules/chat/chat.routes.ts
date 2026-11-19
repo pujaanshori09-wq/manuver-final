@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { currentUserId, requireAuth } from '../../middleware/auth.js';
+import { messageLimit } from '../../middleware/rateLimits.js';
 import { validate } from '../../middleware/validate.js';
 import { MatchIdParams, MessageIdParams, RespondBody, SendMessageBody } from './chat.schemas.js';
 import * as chat from './chat.service.js';
@@ -15,7 +16,7 @@ matchesRouter.get('/:id/messages', validate({ params: MatchIdParams }), async (r
   res.json(await chat.listMessages(currentUserId(req), req.params.id as string));
 });
 
-matchesRouter.post('/:id/messages', validate({ params: MatchIdParams, body: SendMessageBody }), async (req, res) => {
+matchesRouter.post('/:id/messages', messageLimit, validate({ params: MatchIdParams, body: SendMessageBody }), async (req, res) => {
   res.status(201).json(await chat.sendMessage(currentUserId(req), req.params.id as string, req.body));
 });
 

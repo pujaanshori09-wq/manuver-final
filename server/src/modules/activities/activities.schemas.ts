@@ -17,6 +17,10 @@ export const CreateActivityBody = z
     distanceM: z.number().int().min(100).max(1_000_000),
     /** shortcut: one encoded string, capped at 200 KB (~25k points); simplify on the phone if longer routes appear. */
     polyline: z.string().min(2).max(200_000),
+    /** Seconds since startedAt for each polyline point, used to check speeds. */
+    pointTimes: z.array(z.number().int().min(0).max(2 * DAY)).min(2).max(30_000),
+    /** Indices of points where recording resumed after a pause or a vehicle stretch. */
+    segmentStarts: z.array(z.number().int().min(1)).max(5_000).default([]),
     showOnProfile: z.boolean(),
   })
   .refine((v) => new Date(v.endedAt) > new Date(v.startedAt), { message: 'endedAt must be after startedAt', path: ['endedAt'] })

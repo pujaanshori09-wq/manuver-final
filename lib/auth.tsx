@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { fromAccountLanguage, useLanguage } from '@/lib/i18n';
 import { authApi, meApi, onSessionExpired, refreshSession, type Me } from '@/lib/api';
+import { forgetPushToken } from '@/lib/pushNotifications';
 
 /** Minimal session shape (kept compatible with code that reads session.user.id). */
 export type Session = { user: { id: string; email: string | null } };
@@ -113,6 +114,7 @@ export function AuthProvider({ children, onSignOut }: { children: React.ReactNod
   );
 
   const signOut = useCallback(async () => {
+    await forgetPushToken();
     await authApi.logout();
     setMe(null);
     onSignOut?.();

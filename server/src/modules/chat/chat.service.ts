@@ -3,6 +3,9 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { storage } from '../../lib/storage.js';
+import { flag } from '../discover/quota.js';
+import { notify } from '../../lib/push.js';
+import { pushText } from '../../lib/pushText.js';
 import type { SendMessageBody } from './chat.schemas.js';
 
 /** shortcut: a chat returns its latest 200 messages, no paging; add `before=` paging when chats get long. */
@@ -87,7 +90,7 @@ export async function listMessages(userId: string, matchId: string) {
 }
 
 export async function sendMessage(userId: string, matchId: string, body: z.infer<typeof SendMessageBody>) {
-  await matchFor(userId, matchId);
+  const { partnerId } = await matchFor(userId, matchId);
 
   // A retried send (same clientId) returns what was stored the first time.
   const existing = await prisma.message.findUnique({
@@ -116,6 +119,13 @@ export async function sendMessage(userId: string, matchId: string, body: z.infer
       }),
       prisma.match.update({ where: { id: matchId }, data: { lastMessageAt: new Date() } }),
     ]);
+    if (body.type === 'TEXT') await checkCopyPaste(userId, body.content);
+    const sender = await nameOf(userId);
+    notify([partnerId], (lang) => ({
+      title: sender,
+      body: body.type === 'SPARING_INVITE' ? pushText(lang, 'invite', { name: sender, sport: body.invite.sport }) : preview(body.content),
+      data: { type: 'message', matchId },
+    }));
     return message;
   } catch (e) {
     // Two copies of the same retry raced each other; the first one won.
@@ -129,8 +139,30 @@ export async function sendMessage(userId: string, matchId: string, body: z.infer
   }
 }
 
+const nameOf = async (userId: string) =>
+  (await prisma.profile.findUnique({ where: { userId }, select: { name: true } }))?.name ?? '';
+/** A push shows the start of a message only. */
+const preview = (text: string) => (text.length > 120 ? `${text.slice(0, 117)}…` : text);
+
+/**
+ * The same long message sent to many matches looks like spam. Short greetings ("Halo!") are
+ * normal to send to everyone, so only messages of some length count.
+ */
+const COPY_PASTE = { minLength: 20, matches: 5, windowMs: 24 * 3600_000 };
+
+async function checkCopyPaste(userId: string, content: string) {
+  if (content.length < COPY_PASTE.minLength) return;
+  const same = await prisma.message.findMany({
+    where: { senderId: userId, content, createdAt: { gte: new Date(Date.now() - COPY_PASTE.windowMs) } },
+    distinct: ['matchId'],
+    select: { matchId: true },
+    take: COPY_PASTE.matches,
+  });
+  if (same.length >= COPY_PASTE.matches) await flag(prisma, userId, `sent the same message to ${same.length} matches`);
+}
+
 export async function respondToInvite(userId: string, messageId: string, status: 'ACCEPTED' | 'DECLINED') {
-  const msg = await prisma.message.findUnique({ where: { id: messageId }, select: { matchId: true, senderId: true, type: true } });
+  const msg = await prisma.message.findUnique({ where: { id: messageId }, select: { matchId: true, senderId: true, type: true, invite: true } });
   if (!msg) throw notFound('message_not_found', 'Message not found');
   await matchFor(userId, msg.matchId);
   if (msg.type !== 'SPARING_INVITE') throw badRequest('not_an_invite', 'Only sparing invites can be answered');
@@ -142,5 +174,12 @@ export async function respondToInvite(userId: string, messageId: string, status:
     data: { inviteStatus: status, respondedAt: new Date() },
   });
   if (!count) throw conflict('already_answered', 'This invite was already answered');
+  const responder = await nameOf(userId);
+  const sport = String((msg.invite as { sport?: string } | null)?.sport ?? '');
+  notify([msg.senderId], (lang) => ({
+    title: responder,
+    body: pushText(lang, status === 'ACCEPTED' ? 'accepted' : 'declined', { name: responder, sport }),
+    data: { type: 'message', matchId: msg.matchId },
+  }));
   return prisma.message.findUniqueOrThrow({ where: { id: messageId }, select: messageSelect });
 }

@@ -13,8 +13,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../app/_layout';
+import { sosApi } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api/errors';
 
 import { useTheme, makeStyles, type Theme, fonts, space, radius } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
@@ -30,7 +30,6 @@ export default function CreateEmergencySheet({ visible, onClose, onSuccess }: Pr
   const tr = useT();
   const t = useTheme();
   const styles = useStylesTheme();
-  const { session } = useAuth();
   const [sport, setSport] = useState('Badminton');
   const [venue, setVenue] = useState('');
   const [slotsNeeded, setSlotsNeeded] = useState(1);
@@ -51,27 +50,17 @@ export default function CreateEmergencySheet({ visible, onClose, onSuccess }: Pr
 
     setSubmitting(true);
     try {
-      // Default play time: 2 hours from now
-      const playTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      // Expiry: 4 hours from now
-      const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000);
-
       const parsedFee = fee ? parseInt(fee.replace(/[^0-9]/g, ''), 10) : 0;
 
-      const { error } = await supabase.from('emergency_slots').insert({
-        creator_id: session?.user.id,
+      // Play time (two hours from now) and expiry are set by the server.
+      await sosApi.create({
         sport,
-        venue_name: venue.trim(),
-        play_time: playTime.toISOString(),
-        expires_at: expiresAt.toISOString(),
-        slots_needed: slotsNeeded,
-        fee_per_person: isNaN(parsedFee) ? 0 : parsedFee,
-        contact_wa: contactWa.trim(),
+        venueName: venue.trim(),
+        slotsNeeded,
+        feePerPerson: isNaN(parsedFee) ? 0 : parsedFee,
+        contactWa: contactWa.trim(),
         note: note.trim() || null,
-        // status defaults to 'active' in the database; clients cannot set it.
       });
-
-      if (error) throw error;
 
       Alert.alert(tr('sheets.sosPosted'), tr('sheets.sosPostedBody'));
       setVenue('');
@@ -81,7 +70,7 @@ export default function CreateEmergencySheet({ visible, onClose, onSuccess }: Pr
       onSuccess();
       onClose();
     } catch (err: any) {
-      Alert.alert(tr('sheets.error'), err.message || tr('sheets.sosFailed'));
+      Alert.alert(tr('sheets.error'), apiErrorMessage(err, tr));
     } finally {
       setSubmitting(false);
     }

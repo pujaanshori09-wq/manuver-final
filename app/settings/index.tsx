@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlossFill, IconButton, ListRow, ListSection, ProBadge } from '@/components/ui';
 import { LANGUAGES, toAccountLanguage, useLanguage, useT } from '@/lib/i18n';
 import { fonts, makeStyles, radius, space, type, useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
+import { LanguageWheel } from '@/components/LanguageWheel';
 import { meApi } from '@/lib/api';
 import type { Language } from '@/lib/i18n';
 
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const s = useStyles();
   const { language, setLanguage } = useLanguage();
   const { signOut, setMe } = useAuth();
+  const [wheelOpen, setWheelOpen] = useState(false);
 
   // Switch immediately; save to the account in the background so other devices follow.
   const changeLanguage = (l: Language) => {
@@ -68,10 +70,14 @@ export default function SettingsScreen() {
           />
         </ListSection>
 
-        <ListSection title={tr('language.title')}>
-          {LANGUAGES.map(({ code, native }) => (
-            <ListRow key={code} label={native} checked={language === code} chevron={false} onPress={() => changeLanguage(code)} />
-          ))}
+        <ListSection>
+          <ListRow
+            icon="language-outline"
+            label={tr('language.title')}
+            value={LANGUAGES.find((l) => l.code === language)?.native}
+            onPress={() => setWheelOpen(true)}
+            chevron
+          />
         </ListSection>
 
         <ListSection title={tr('settings.contactUs')}>
@@ -101,6 +107,13 @@ export default function SettingsScreen() {
           <Text style={s.version}>{tr('settings.version', { v: '1.0.4' })}</Text>
         </View>
       </ScrollView>
+
+      <LanguageWheel
+        visible={wheelOpen}
+        value={language}
+        onSelect={(l) => l !== language && changeLanguage(l)}
+        onClose={() => setWheelOpen(false)}
+      />
     </View>
   );
 }
@@ -133,7 +146,7 @@ const useStyles = makeStyles((t) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.bg },
     header: {
-      height: 60,
+      height: 52,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',

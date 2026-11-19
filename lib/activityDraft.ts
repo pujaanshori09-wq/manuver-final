@@ -13,6 +13,8 @@ export type Draft = {
   movingSec: number;
   distanceM: number;
   points: TrackPoint[];
+  /** Indices in points where recording resumed (absent in drafts saved before speed checks). */
+  segmentStarts?: number[];
   autoPause: boolean;
 };
 

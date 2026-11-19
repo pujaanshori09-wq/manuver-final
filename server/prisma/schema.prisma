@@ -16,18 +16,20 @@ datasource db {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
   /// Null for accounts that signed up with a phone number only.
-  email        String?  @unique
+  email           String?   @unique
   /// bcrypt hash. Null for accounts that only sign in with Google or a phone number.
-  passwordHash String?
-  googleId     String?  @unique
-  emailVerified Boolean @default(false)
+  passwordHash    String?
+  googleId        String?   @unique
+  emailVerified   Boolean   @default(false)
   /// E.164, e.g. +14155550123. Set once the number is verified with an OTP.
-  phone        String?  @unique
+  phone           String?   @unique
   phoneVerifiedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// Premium (unlimited Likes, 5 Super Likes a week) until this moment. Set by hand in Prisma Studio until payments exist.
+  premiumUntil    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   profile        Profile?
   refreshTokens  RefreshToken[]
@@ -35,22 +37,25 @@ model User {
   photos         ProfilePhoto[]
   sports         UserSport[]
   prompts        ProfilePrompt[]
-  swipesMade     Swipe[]        @relation("SwipesMade")
-  swipesReceived Swipe[]        @relation("SwipesReceived")
-  matchesA       Match[]        @relation("MatchUserA")
-  matchesB       Match[]        @relation("MatchUserB")
+  swipesMade     Swipe[]              @relation("SwipesMade")
+  swipesReceived Swipe[]              @relation("SwipesReceived")
+  matchesA       Match[]              @relation("MatchUserA")
+  matchesB       Match[]              @relation("MatchUserB")
   messages       Message[]
-  blocksMade     Block[]        @relation("BlocksMade")
-  blocksReceived Block[]        @relation("BlocksReceived")
+  blocksMade     Block[]              @relation("BlocksMade")
+  blocksReceived Block[]              @relation("BlocksReceived")
   activities     Activity[]
-  reportsMade    Report[]       @relation("ReportsMade")
-  reportsAgainst Report[]       @relation("ReportsAgainst")
+  reportsMade    Report[]             @relation("ReportsMade")
+  reportsAgainst Report[]             @relation("ReportsAgainst")
   sessions       OpenSession[]
   sessionJoins   SessionParticipant[]
   sosSlots       EmergencySlot[]
   sosClaims      EmergencySlotClaim[]
   events         Event[]
   eventRegs      EventRegistration[]
+  swipeEvents    SwipeEvent[]
+  abuseEvents    AbuseEvent[]
+  pushTokens     PushToken[]
 
   @@map("users")
 }
@@ -73,23 +78,6 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
-}
-
-/// One row per OTP request (rate limiting + the code itself when the "console" provider is used).
-model PhoneOtp {
-  id         String    @id @default(uuid()) @db.Uuid
-  phone      String
-  /// HMAC of the code. Null when the provider (Twilio Verify) keeps the code.
-  codeHash   String?
-  ip         String?
-  attempts   Int       @default(0)
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([phone, createdAt])
-  @@index([ip, createdAt])
-  @@map("phone_otps")
 }
 
 /// Short-lived one-time code that hands a server-side OAuth sign-in back to the app.
@@ -153,47 +141,46 @@ enum AppLanguage {
 }
 
 model Profile {
-  userId          String    @id @db.Uuid
-  name            String    @default("")
-  language        AppLanguage?
-  birthDate       DateTime? @db.Date
-  gender          Gender?
-  bio             String?
-  lookingFor      String?
-  skillLevel      String?
-  job             String?
-  education       String?
+  userId        String       @id @db.Uuid
+  name          String       @default("")
+  language      AppLanguage?
+  birthDate     DateTime?    @db.Date
+  gender        Gender?
+  bio           String?
+  lookingFor    String?
+  skillLevel    String?
+  job           String?
+  education     String?
   /// City / area shown publicly (e.g. "Jakarta Selatan").
-  city            String?
-  heightCm        Int?
-  sportRole       String?
-  preferredTime   String?
-  playFrequency   String?
-  homeVenue       String?
-  workoutStyle    String?
-  availability    String[]  @default([])
+  city          String?
+  heightCm      Int?
+  sportRole     String?
+  preferredTime String?
+  playFrequency String?
+  homeVenue     String?
+  workoutStyle  String?
+  availability  String[]     @default([])
 
   // Location: private. Only distance is ever exposed to other users.
-  latitude        Float?
-  longitude       Float?
+  latitude          Float?
+  longitude         Float?
   locationUpdatedAt DateTime?
 
   // Discovery preferences
-  ageMin          Int       @default(18)
-  ageMax          Int       @default(50)
+  ageMin           Int              @default(18)
+  ageMax           Int              @default(50)
   genderPreference GenderPreference @default(ALL)
-  maxDistanceKm   Int       @default(25)
-  ghostMode       Boolean   @default(false)
+  maxDistanceKm    Int              @default(25)
+  ghostMode        Boolean          @default(false)
 
   // Onboarding & moderation (server-controlled)
-  termsAcceptedAt     DateTime?
+  termsAcceptedAt       DateTime?
   onboardingCompletedAt DateTime?
-  flaggedForReview    Boolean   @default(false)
+  flaggedForReview      Boolean   @default(false)
 
-  pushToken       String?
-  lastActiveAt    DateTime  @default(now())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -203,12 +190,12 @@ model Profile {
 }
 
 model ProfilePhoto {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
   /// Storage key (e.g. "users/<id>/<file>.jpg"); the URL is built by the storage layer.
   storageKey String
-  position  Int
-  createdAt DateTime @default(now())
+  position   Int
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -231,11 +218,11 @@ model UserSport {
 }
 
 model PromptQuestion {
-  id        String   @id @default(uuid()) @db.Uuid
-  textEn    String
-  textId    String
-  category  String?
-  isActive  Boolean  @default(true)
+  id       String  @id @default(uuid()) @db.Uuid
+  textEn   String
+  textId   String
+  category String?
+  isActive Boolean @default(true)
 
   answers ProfilePrompt[]
 
@@ -268,11 +255,11 @@ enum SwipeAction {
 }
 
 model Swipe {
-  userId     String      @db.Uuid
-  targetId   String      @db.Uuid
-  action     SwipeAction
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  userId    String      @db.Uuid
+  targetId  String      @db.Uuid
+  action    SwipeAction
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   user   User @relation("SwipesMade", fields: [userId], references: [id], onDelete: Cascade)
   target User @relation("SwipesReceived", fields: [targetId], references: [id], onDelete: Cascade)
@@ -284,10 +271,10 @@ model Swipe {
 
 /// userAId < userBId (sorted) so a pair can only ever have one match.
 model Match {
-  id        String   @id @default(uuid()) @db.Uuid
-  userAId   String   @db.Uuid
-  userBId   String   @db.Uuid
-  createdAt DateTime @default(now())
+  id            String    @id @default(uuid()) @db.Uuid
+  userAId       String    @db.Uuid
+  userBId       String    @db.Uuid
+  createdAt     DateTime  @default(now())
   lastMessageAt DateTime?
 
   userA    User      @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
@@ -311,19 +298,19 @@ enum InviteStatus {
 }
 
 model Message {
-  id        String       @id @default(uuid()) @db.Uuid
-  matchId   String       @db.Uuid
-  senderId  String       @db.Uuid
-  type      MessageType  @default(TEXT)
-  content   String
+  id           String        @id @default(uuid()) @db.Uuid
+  matchId      String        @db.Uuid
+  senderId     String        @db.Uuid
+  type         MessageType   @default(TEXT)
+  content      String
   /// Sparing invite details (sport, venueName, scheduledAt, note).
-  invite    Json?
+  invite       Json?
   inviteStatus InviteStatus?
   respondedAt  DateTime?
   /// Client-generated id so retries never create duplicates.
-  clientId  String?      @db.Uuid
-  readAt    DateTime?
-  createdAt DateTime     @default(now())
+  clientId     String?       @db.Uuid
+  readAt       DateTime?
+  createdAt    DateTime      @default(now())
 
   match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
   sender User  @relation(fields: [senderId], references: [id], onDelete: Cascade)
@@ -350,19 +337,66 @@ model Block {
   @@map("blocks")
 }
 
-model Report {
-  id         String   @id @default(uuid()) @db.Uuid
-  reporterId String   @db.Uuid
-  reportedId String   @db.Uuid
-  reason     String   @db.VarChar(200)
-  details    String?  @db.VarChar(2000)
-  createdAt  DateTime @default(now())
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
 
-  reporter User @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
-  reported User @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: Cascade)
+/// Reports outlive both accounts: deleting an account must not erase the evidence against it.
+model Report {
+  id            String       @id @default(uuid()) @db.Uuid
+  reporterId    String?      @db.Uuid
+  reportedId    String?      @db.Uuid
+  /// Email of the reported account when the report was made, to recognise a re-registration.
+  reportedEmail String?
+  reason        String       @db.VarChar(200)
+  details       String?      @db.VarChar(2000)
+  status        ReportStatus @default(OPEN)
+  reviewedAt    DateTime?
+  createdAt     DateTime     @default(now())
+
+  reporter User? @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: SetNull)
+  reported User? @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: SetNull)
 
   @@index([reportedId, createdAt])
+  @@index([status, createdAt])
   @@map("reports")
+}
+
+/// Every swipe as it happened (the swipes table only keeps the latest answer per pair).
+/// Quotas and rate limits count these rows, so they hold whatever the app does.
+model SwipeEvent {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @db.Uuid
+  action    SwipeAction
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("swipe_events")
+}
+
+enum AbuseKind {
+  RATE_LIMIT_HIT
+  FLAGGED
+}
+
+/// Signals about automated or abusive use, kept for review in Prisma Studio.
+model AbuseEvent {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  kind      AbuseKind
+  /// Why: which limit was hit, or which bot rule raised the flag.
+  reason    String
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+  @@map("abuse_events")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -377,8 +411,8 @@ enum SessionStatus {
 }
 
 model OpenSession {
-  id          String        @id @default(uuid()) @db.Uuid
-  creatorId   String        @db.Uuid
+  id          String           @id @default(uuid()) @db.Uuid
+  creatorId   String           @db.Uuid
   sport       String
   title       String
   venueName   String
@@ -386,8 +420,8 @@ model OpenSession {
   slotsTotal  Int
   genderPref  GenderPreference @default(ALL)
   skillNote   String?
-  status      SessionStatus @default(OPEN)
-  createdAt   DateTime      @default(now())
+  status      SessionStatus    @default(OPEN)
+  createdAt   DateTime         @default(now())
 
   creator      User                 @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   participants SessionParticipant[]
@@ -455,27 +489,30 @@ enum EventStatus {
 }
 
 model Event {
-  id          String      @id @default(uuid()) @db.Uuid
-  creatorId   String      @db.Uuid
-  title       String
-  organizer   String
-  type        String
-  category    String
-  dateText    String
-  location    String
-  city        String
-  priceText   String?
-  quota       Int?
-  imageUrl    String?
-  isFeatured  Boolean     @default(false)
+  id         String      @id @default(uuid()) @db.Uuid
+  creatorId  String      @db.Uuid
+  title      String
+  organizer  String
+  type       String
+  category   String
+  /// When it starts. Past events drop out of the list.
+  startsAt   DateTime
+  location   String
+  city       String
+  /// Entry fee in rupiah; 0 = free.
+  priceIdr   Int         @default(0)
+  /// Most registrations accepted; null = no limit.
+  quota      Int?
+  imageUrl   String?
+  isFeatured Boolean     @default(false)
   /// New events start PENDING; only the server/admin can approve.
-  status      EventStatus @default(PENDING)
-  createdAt   DateTime    @default(now())
+  status     EventStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
 
   creator       User                @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   registrations EventRegistration[]
 
-  @@index([status, createdAt])
+  @@index([status, startsAt])
   @@map("events")
 }
 
@@ -513,6 +550,10 @@ model Activity {
   distanceM     Int
   /// Google encoded polyline (precision 5) of the full route; only the owner sees it untrimmed.
   polyline      String
+  /// Seconds since startedAt for each point of the polyline (same order). Empty for activities saved before speed checks.
+  pointTimes    Int[]        @default([])
+  /// Indices of points where recording resumed (after a pause or a vehicle stretch); the jump into them is not route.
+  segmentStarts Int[]        @default([])
   showOnProfile Boolean      @default(true)
   /// Anyone with the link can view the activity (off by default).
   isPublic      Boolean      @default(false)
@@ -525,4 +566,20 @@ model Activity {
   @@unique([userId, clientId])
   @@index([userId, startedAt])
   @@map("activities")
+}
+
+/**
+ * Expo push tokens, one per installed app (a person can have several phones).
+ */
+model PushToken {
+  /// "ExponentPushToken[...]"; unique, so a phone that changes hands moves to the new account.
+  token     String   @id
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }

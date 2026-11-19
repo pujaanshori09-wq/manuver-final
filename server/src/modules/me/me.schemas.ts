@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PUSH_TOKEN_RE } from '../../lib/push.js';
 
 /** App languages (ISO 639-1, upper case). Arabic waits for right-to-left layout support. */
 export const AppLanguage = z.enum(['EN', 'ID', 'ZH', 'ES', 'HI', 'PT', 'RU', 'JA', 'DE', 'FR', 'KO', 'VI', 'TH', 'MS']);
@@ -101,5 +102,7 @@ export const PromptsBody = z.object({
 export const PhotoOrderBody = z.object({
   ids: z.array(z.uuid()).min(1).max(4),
 });
+
+export const PushTokenBody = z.object({ token: z.string().regex(PUSH_TOKEN_RE, 'Not an Expo push token') });
 
 export const PhotoIdParams = z.object({ id: z.uuid() });

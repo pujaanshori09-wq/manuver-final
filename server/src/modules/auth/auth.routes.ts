@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
-import { isTest } from '../../config/env.js';
 import { currentUserId, requireAuth } from '../../middleware/auth.js';
+import { authByEmail, authByIp } from '../../middleware/rateLimits.js';
 import { validate } from '../../middleware/validate.js';
 import {
   ForgotBody,
@@ -19,31 +18,22 @@ import { AppError } from '../../lib/errors.js';
 
 export const authRouter = Router();
 
-// Brute-force protection on credential endpoints (per IP). Off in tests.
-const credentialLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: isTest ? 10_000 : 20,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  message: { error: { code: 'rate_limited', message: 'Too many attempts. Try again later.' } },
-});
-
 const ua = (h: string | undefined) => h ?? undefined;
 
-authRouter.post('/register', credentialLimiter, validate({ body: RegisterBody }), async (req, res) => {
+authRouter.post('/register', authByIp, validate({ body: RegisterBody }), authByEmail, async (req, res) => {
   res.status(201).json(await auth.register(req.body, ua(req.headers['user-agent'])));
 });
 
-authRouter.post('/login', credentialLimiter, validate({ body: LoginBody }), async (req, res) => {
+authRouter.post('/login', authByIp, validate({ body: LoginBody }), authByEmail, async (req, res) => {
   res.json(await auth.login(req.body, ua(req.headers['user-agent'])));
 });
 
-authRouter.post('/google', credentialLimiter, validate({ body: GoogleBody }), async (req, res) => {
+authRouter.post('/google', authByIp, validate({ body: GoogleBody }), async (req, res) => {
   res.json(await auth.google(req.body.idToken, ua(req.headers['user-agent'])));
 });
 
 // ── Google (server-side OAuth 2.0 + PKCE) ──
-authRouter.get('/google/start', credentialLimiter, validate({ query: GoogleStartQuery }), async (req, res) => {
+authRouter.get('/google/start', authByIp, validate({ query: GoogleStartQuery }), async (req, res) => {
   const { origin, returnUrl } = res.locals.query as { origin: string; returnUrl: string };
   const okOrigin = auth.allowedOrigin(origin);
   const okReturn = auth.allowedReturnUrl(returnUrl);
@@ -82,7 +72,7 @@ authRouter.get('/google/callback', async (req, res) => {
   }
 });
 
-authRouter.post('/google/exchange', credentialLimiter, validate({ body: HandoffBody }), async (req, res) => {
+authRouter.post('/google/exchange', authByIp, validate({ body: HandoffBody }), async (req, res) => {
   res.json(await auth.exchangeHandoff(req.body.code, ua(req.headers['user-agent'])));
 });
 
@@ -95,7 +85,7 @@ authRouter.post('/logout', validate({ body: RefreshBody }), async (req, res) => 
   res.status(204).end();
 });
 
-authRouter.post('/password/forgot', credentialLimiter, validate({ body: ForgotBody }), async (req, res) => {
+authRouter.post('/password/forgot', authByIp, validate({ body: ForgotBody }), authByEmail, async (req, res) => {
   await auth.forgotPassword(req.body.email, req.body.returnUrl);
   // Same response whether or not the email exists.
   res.status(202).json({ ok: true });
@@ -124,7 +114,7 @@ authRouter.get('/email/verify', async (req, res) => {
     .send(page(ok ? 'Your email is confirmed. You can close this page.' : 'This link is invalid or has expired.'));
 });
 
-authRouter.post('/password/reset', credentialLimiter, validate({ body: ResetBody }), async (req, res) => {
+authRouter.post('/password/reset', authByIp, validate({ body: ResetBody }), async (req, res) => {
   await auth.resetPassword(req.body.token, req.body.password);
   res.status(204).end();
 });

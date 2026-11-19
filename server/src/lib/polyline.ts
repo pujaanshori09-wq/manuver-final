@@ -69,3 +69,14 @@ export function trimEnds(points: LatLng[], meters: number): LatLng[] {
   };
   return cut(cut(points).reverse()).reverse();
 }
+
+export function routeLength(points: LatLng[]) {
+  let m = 0;
+  for (let i = 1; i < points.length; i++) m += metersBetween(points[i - 1]!, points[i]!);
+  return m;
+}
+
+/** Privacy zone shown to others: 200 m at each end, or 20% of the route when it is short. */
+export function privacyTrim(points: LatLng[]): LatLng[] {
+  return trimEnds(points, Math.min(200, routeLength(points) * 0.2));
+}

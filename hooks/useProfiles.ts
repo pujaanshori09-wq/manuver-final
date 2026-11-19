@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { assetUrl, discoverApi, type DiscoverPlayer, type SwipeAction } from '@/lib/api';
+import { assetUrl, discoverApi, swipeLimitFrom, type DiscoverPlayer, type SwipeAction, type SwipeLimit } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { loadSportFilter, sportsQuery } from '@/lib/discoverFilters';
 import { translate, useLanguage } from '@/lib/i18n';
@@ -48,6 +48,8 @@ export function useProfiles() {
   const { me } = useAuth();
   const { language } = useLanguage();
   const [matchData, setMatchData] = useState<MatchData | null>(null);
+  // Set when the server refuses a swipe (quota used up or swiping too fast).
+  const [swipeLimit, setSwipeLimit] = useState<SwipeLimit | null>(null);
 
   const fetchPage = async () => {
     const sports = sportsQuery(await loadSportFilter());
@@ -102,10 +104,12 @@ export function useProfiles() {
       });
       return { left };
     },
-    onError: (_err, { profile }) => {
+    onError: (err, { profile }) => {
       // Put the card back on top so the swipe can be retried.
       setDeck((old) => (old.some((p) => p.id === profile.id) ? old : [profile, ...old]));
-      Alert.alert(translate('discover.swipeFailedTitle'), translate('discover.swipeFailedBody'));
+      const limit = swipeLimitFrom(err);
+      if (limit) setSwipeLimit(limit);
+      else Alert.alert(translate('discover.swipeFailedTitle'), translate('discover.swipeFailedBody'));
     },
     onSuccess: (res, { profile }, ctx) => {
       if (res.isMatch && res.matchId) {
@@ -133,5 +137,7 @@ export function useProfiles() {
     fetchProfiles,
     handleSwipeComplete,
     closeMatchModal: () => setMatchData(null),
+    swipeLimit,
+    closeSwipeLimit: () => setSwipeLimit(null),
   };
 }

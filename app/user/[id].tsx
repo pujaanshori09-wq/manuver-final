@@ -18,8 +18,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 // shortcut: block and report still go through Supabase until stage 6 moves them to the new API.
-import { supabase } from '../../lib/supabase';
-import { assetUrl, usersApi } from '@/lib/api';
+import { assetUrl, safetyApi, usersApi, type ReportReason } from '@/lib/api';
 import { ProfileActivities } from '../../components/ProfileActivities';
 
 import { useTheme, makeStyles, type Theme, fonts, space, radius } from '@/lib/theme';
@@ -114,8 +113,7 @@ export default function UserDetailScreen() {
 
   const executeBlock = async () => {
     try {
-      const { error } = await supabase.rpc('block_user', { p_blocked_id: id });
-      if (error) throw error;
+      await safetyApi.block(String(id));
       Alert.alert(tr('userProfile.blockedTitle'), tr('userProfile.blockedBody', { name: user.nama }));
       router.back();
     } catch (e: any) {
@@ -134,10 +132,9 @@ export default function UserDetailScreen() {
     );
   };
 
-  const executeReport = async (reason: string) => {
+  const executeReport = async (reason: ReportReason) => {
     try {
-      const { error } = await supabase.rpc('report_user', { p_reported_id: id, p_reason: reason });
-      if (error) throw error;
+      await safetyApi.report(String(id), reason);
       Alert.alert(tr('userProfile.reportThanksTitle'), tr('userProfile.reportThanksBody'));
     } catch (e: any) {
       Alert.alert(tr('userProfile.reportError'), e.message);
@@ -147,8 +144,8 @@ export default function UserDetailScreen() {
   const handleReportFlow = () => {
     Alert.alert(tr('userProfile.reportTitle'), tr('userProfile.reportBody', { name: user.nama }), [
       { text: tr('userProfile.cancel'), style: 'cancel' },
-      { text: tr('userProfile.reasonRude'), onPress: () => executeReport('Perilaku Tidak Sopan') },
-      { text: tr('userProfile.reasonSpam'), onPress: () => executeReport('Spam atau Akun Palsu') },
+      { text: tr('userProfile.reasonRude'), onPress: () => executeReport('RUDE') },
+      { text: tr('userProfile.reasonSpam'), onPress: () => executeReport('SPAM') },
     ]);
   };
 

@@ -4,6 +4,9 @@ import { badRequest, forbidden, notFound } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { storage } from '../../lib/storage.js';
 import type { DiscoverQuery } from './discover.schemas.js';
+import { checkSwipe, checkSwipePatterns, readQuota } from './quota.js';
+import { notify } from '../../lib/push.js';
+import { pushText } from '../../lib/pushText.js';
 
 const EARTH_RADIUS_KM = 6371;
 /** Candidates pulled from the database before the exact distance filter and sort. */
@@ -171,7 +174,8 @@ export async function discover(userId: string, q: z.infer<typeof DiscoverQuery>)
       })),
     }));
 
-  return { items };
+  const { premiumUntil } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { premiumUntil: true } });
+  return { items, quota: await readQuota(prisma, userId, premiumUntil) };
 }
 
 export async function swipe(userId: string, targetId: string, action: 'LIKE' | 'PASS' | 'SUPER') {
@@ -199,35 +203,62 @@ export async function swipe(userId: string, targetId: string, action: 'LIKE' | '
 
   const [userAId, userBId] = userId < targetId ? [userId, targetId] : [targetId, userId];
 
-  const matchId = await prisma.$transaction(async (tx) => {
+  const { premiumUntil } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { premiumUntil: true } });
+
+  const { matchId, quota, isNewMatch } = await prisma.$transaction(async (tx) => {
+    // One swipe at a time per person, so two quick taps cannot both use the last Like.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'swipe:' + userId}, 0))`;
     // Two people liking each other at the same instant would otherwise each miss the other's swipe.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userAId + userBId}, 0))`;
+
+    // Repeating the same answer (a retried request) costs nothing; anything new is counted.
+    const before = await tx.swipe.findUnique({ where: { userId_targetId: { userId, targetId } }, select: { action: true } });
+    let quota;
+    if (before?.action === action) {
+      quota = await readQuota(tx, userId, premiumUntil);
+    } else {
+      quota = await checkSwipe(tx, userId, premiumUntil, action);
+      await tx.swipeEvent.create({ data: { userId, action } });
+      await checkSwipePatterns(tx, userId);
+    }
 
     await tx.swipe.upsert({
       where: { userId_targetId: { userId, targetId } },
       create: { userId, targetId, action },
       update: { action },
     });
-    if (action === 'PASS') return null;
+    if (action === 'PASS') return { matchId: null, quota, isNewMatch: false };
 
     const theirs = await tx.swipe.findUnique({
       where: { userId_targetId: { userId: targetId, targetId: userId } },
       select: { action: true },
     });
-    if (!theirs || theirs.action === 'PASS') return null;
+    if (!theirs || theirs.action === 'PASS') return { matchId: null, quota, isNewMatch: false };
 
+    const existed = await tx.match.findUnique({ where: { userAId_userBId: { userAId, userBId } }, select: { id: true } });
     const match = await tx.match.upsert({
       where: { userAId_userBId: { userAId, userBId } },
       create: { userAId, userBId },
       update: {},
       select: { id: true },
     });
-    return match.id;
+    return { matchId: match.id, quota, isNewMatch: !existed };
   });
+
+  // The swiper sees the match screen; the other person hears about it by push.
+  if (isNewMatch && matchId) {
+    const me = await prisma.profile.findUnique({ where: { userId }, select: { name: true } });
+    notify([targetId], (lang) => ({
+      title: pushText(lang, 'matchTitle'),
+      body: pushText(lang, 'matchBody', { name: me?.name ?? '' }),
+      data: { type: 'match', matchId },
+    }));
+  }
 
   return {
     isMatch: matchId !== null,
     matchId,
+    quota,
     partner: {
       id: targetId,
       name: target.name,

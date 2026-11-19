@@ -1,55 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import { eventsApi, type SportEvent } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api/errors';
+import { eventDisplay, type EventDisplay } from '@/lib/events';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTheme, makeStyles, type Theme, fonts, space, radius } from '@/lib/theme';
-import { useT } from '@/lib/i18n';
+import { useLanguage, useT } from '@/lib/i18n';
 export default function EventDetailScreen() {
   const tr = useT();
+  const { language } = useLanguage();
   const t = useTheme();
   const styles = useStylesTheme();
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
-  const [event, setEvent] = useState<any>(null);
+  const [event, setEvent] = useState<EventDisplay | null>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [hasRegistered, setHasRegistered] = useState(false);
 
+  const toShow = (e: SportEvent) => eventDisplay(e, language, tr('sheets.free'));
+
   const fetchEventDetails = async () => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-
-      // Ambil data event
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('id', id)
-        .single();
-        
-      if (error) throw error;
-      setEvent(data);
-
-      // Cek apakah user sudah mendaftar
-      if (userId) {
-        const { data: regData } = await supabase
-          .from('event_registrations')
-          .select('*')
-          .eq('event_id', id)
-          .eq('user_id', userId)
-          .eq('status', 'registered')
-          .single();
-          
-        if (regData) setHasRegistered(true);
-      }
-    } catch (e: any) {
-      Alert.alert(tr('event.error'), e.message);
+      const e = await eventsApi.get(String(id));
+      setEvent(toShow(e));
+      setHasRegistered(e.isRegistered);
+    } catch (e) {
+      Alert.alert(tr('event.error'), apiErrorMessage(e, tr));
     } finally {
       setLoading(false);
     }
@@ -58,34 +41,22 @@ export default function EventDetailScreen() {
   const handleRegister = async () => {
     try {
       setRegistering(true);
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user?.id) throw new Error("Anda harus login untuk mendaftar.");
-
-      const { error } = await supabase.from('event_registrations').insert([
-        {
-          event_id: id,
-          user_id: userData.user.id,
-          status: 'registered'
-        }
-      ]);
-
-      if (error) {
-        if (error.code === '23505') { // unique violation
-          throw new Error("Anda sudah terdaftar di event ini.");
-        }
-        throw error;
-      }
-
-      // Update angka partisipan di UI optimistically
+      // The server checks the quota and that the event is approved and still ahead.
+      const e = await eventsApi.register(String(id));
+      setEvent(toShow(e));
       setHasRegistered(true);
       Alert.alert(tr('event.registeredTitle'), tr('event.registeredBody'));
-      
-    } catch (e: any) {
-      Alert.alert(tr('event.registerFailed'), e.message);
+    } catch (e) {
+      Alert.alert(tr('event.registerFailed'), apiErrorMessage(e, tr));
     } finally {
       setRegistering(false);
     }
   };
+
+  useEffect(() => {
+    fetchEventDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   if (loading) {
     return (
@@ -108,7 +79,7 @@ export default function EventDetailScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Hero Image */}
         <View style={styles.heroContainer}>
-          <Image source={{ uri: event.image_url }} style={styles.heroImage} resizeMode="cover" />
+          <Image source={{ uri: event.image }} style={styles.heroImage} resizeMode="cover" />
           <LinearGradient
             colors={['rgba(9,10,13,0.7)', 'transparent', t.bg]}
             locations={[0, 0.4, 1]}
@@ -138,7 +109,7 @@ export default function EventDetailScreen() {
               <View style={styles.iconCircle}><Ionicons name="calendar" size={20} color={t.primary} /></View>
               <View>
                 <Text style={styles.infoLabel}>{tr('event.dateTime')}</Text>
-                <Text style={styles.infoValue}>{event.date}</Text>
+                <Text style={styles.infoValue}>{event.dateTime}</Text>
               </View>
             </View>
             <View style={styles.infoDivider} />
@@ -162,12 +133,12 @@ export default function EventDetailScreen() {
           <Text style={styles.sectionTitle}>{tr('event.verification')}</Text>
           <View style={styles.statusBox}>
             <Ionicons 
-              name={event.status === 'approved' ? 'checkmark-circle' : 'time'} 
+              name={event.status === 'APPROVED' ? 'checkmark-circle' : 'time'} 
               size={24} 
-              color={event.status === 'approved' ? t.success : t.primary} 
+              color={event.status === 'APPROVED' ? t.success : t.primary} 
             />
             <Text style={styles.statusText}>
-              {event.status === 'approved' ? tr('event.verified') : tr('event.inReview')}
+              {event.status === 'APPROVED' ? tr('event.verified') : tr('event.inReview')}
             </Text>
           </View>
         </View>
@@ -179,13 +150,13 @@ export default function EventDetailScreen() {
           style={[
             styles.registerBtn, 
             hasRegistered && styles.registeredBtn,
-            (registering || (event.status !== 'approved' && !hasRegistered)) && { opacity: 0.5 }
+            (registering || (event.status !== 'APPROVED' && !hasRegistered)) && { opacity: 0.5 }
           ]} 
           onPress={hasRegistered ? undefined : handleRegister}
-          disabled={hasRegistered || registering || event.status !== 'approved'}
+          disabled={hasRegistered || registering || event.status !== 'APPROVED'}
         >
           <Text style={styles.registerBtnText}>
-            {registering ? tr('event.registering') : hasRegistered ? tr('event.registered') : event.status === 'approved' ? tr('event.register') : tr('event.notVerified')}
+            {registering ? tr('event.registering') : hasRegistered ? tr('event.registered') : event.status === 'APPROVED' ? tr('event.register') : tr('event.notVerified')}
           </Text>
         </TouchableOpacity>
       </View>

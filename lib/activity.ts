@@ -48,7 +48,6 @@ export function encodeRoute(points: (LatLng | TrackPoint)[]): string {
   for (const p of points) {
     const lat = Math.round(p[0] * 1e5);
     const lng = Math.round(p[1] * 1e5);
-    if (lat === pLat && lng === pLng && out) continue; // same spot to ~1 m
     out += encodeValue(lat - pLat) + encodeValue(lng - pLng);
     pLat = lat;
     pLng = lng;
@@ -146,4 +145,87 @@ export function trimEnds(points: LatLng[], meters = PRIVACY_M): LatLng[] {
     return [];
   };
   return cut(cut(points).reverse()).reverse();
+}
+
+export function routeLength(points: (LatLng | TrackPoint)[]) {
+  let m = 0;
+  for (let i = 1; i < points.length; i++) m += metersBetween(points[i - 1]!, points[i]!);
+  return m;
+}
+
+/** What others see: 200 m off each end, or 20% when the route is short. Same rule as the server. */
+export function privacyTrim(points: LatLng[]): LatLng[] {
+  return trimEnds(points, Math.min(PRIVACY_M, routeLength(points) * 0.2));
+}
+
+// ── Human speed limits (same numbers as server/src/modules/activities/speed.ts) ─────
+
+export const SPEED_LIMITS: Record<ActivityType, { windowKmh: number; avgKmh: number }> = {
+  RUN: { windowKmh: 36, avgKmh: 25 },
+  HIKE: { windowKmh: 20, avgKmh: 16 },
+  RIDE: { windowKmh: 80, avgKmh: 60 },
+};
+export const WINDOW_SEC = 30;
+
+/** Speed (km/h) over the last 30 s of the segment; null until at least 15 s are recorded. */
+export function windowKmh(segment: TrackPoint[]): number | null {
+  if (segment.length < 2) return null;
+  const last = segment[segment.length - 1]!;
+  let meters = 0;
+  let i = segment.length - 1;
+  while (i > 0 && last[2] - segment[i - 1]![2] <= WINDOW_SEC * 1000) {
+    meters += metersBetween(segment[i - 1]!, segment[i]!);
+    i--;
+  }
+  const secs = (last[2] - segment[i]![2]) / 1000;
+  return secs >= 15 ? (meters / secs) * 3.6 : null;
+}
+
+/** km/h between two fixes: used to drop GPS "teleports" (a single wild point). */
+export const stepKmh = (a: TrackPoint, b: TrackPoint) =>
+  b[2] > a[2] ? (metersBetween(a, b) / ((b[2] - a[2]) / 1000)) * 3.6 : Infinity;
+
+/** The owner's full route split into the hidden start, what others see, and the hidden end. */
+export function splitPrivate(route: LatLng[]): { head: LatLng[]; visible: LatLng[]; tail: LatLng[] } {
+  const visible = privacyTrim(route);
+  if (visible.length < 2) return { head: route, visible: [], tail: [] };
+  // trimEnds slices, so the visible part is the same objects as a stretch of the route.
+  const from = route.indexOf(visible[0]!);
+  const to = route.lastIndexOf(visible[visible.length - 1]!);
+  return { head: route.slice(0, from + 1), visible, tail: route.slice(to) };
+}
+
+const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+const PACE_STOPS = ['#9A3412', '#F97316', '#FFD08A'].map(hex);
+
+/**
+ * One colour per point for the live route: deep orange where you were slow, light where you were fast.
+ * Speeds are smoothed over a few fixes and scaled between this route's own slow and fast parts.
+ */
+export function paceColors(points: TrackPoint[], segmentStarts: number[] = []): string[] {
+  const n = points.length;
+  if (n < 3) return points.map(() => '#F97316');
+  const starts = new Set(segmentStarts);
+  const step = points.map((p, i) => (i === 0 || starts.has(i) ? null : Math.min(stepKmh(points[i - 1]!, p), 120)));
+  const smooth = step.map((_, i) => {
+    let sum = 0;
+    let c = 0;
+    for (let j = Math.max(1, i - 3); j <= Math.min(n - 1, i + 3); j++) {
+      const v = step[j];
+      if (v !== null && v !== undefined && Number.isFinite(v)) {
+        sum += v;
+        c++;
+      }
+    }
+    return c ? sum / c : null;
+  });
+  const sorted = smooth.filter((v): v is number => v !== null).sort((a, b) => a - b);
+  if (!sorted.length) return points.map(() => '#F97316');
+  const lo = sorted[Math.floor(sorted.length * 0.1)]!;
+  const hi = sorted[Math.floor(sorted.length * 0.9)]!;
+  return smooth.map((v) => {
+    const f = v === null || hi - lo < 0.5 ? 0.5 : Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+    const [a, b, k] = f < 0.5 ? [PACE_STOPS[0]!, PACE_STOPS[1]!, f * 2] : [PACE_STOPS[1]!, PACE_STOPS[2]!, (f - 0.5) * 2];
+    return '#' + a.map((x, i) => Math.round(x + (b[i]! - x) * k).toString(16).padStart(2, '0')).join('');
+  });
 }

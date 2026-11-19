@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { unauthorized } from '../lib/errors.js';
+import { touchActive } from '../lib/housekeeping.js';
 import { verifyAccessToken } from '../lib/tokens.js';
 
 declare global {
@@ -18,6 +19,7 @@ export const requireAuth: RequestHandler = (req, _res, next) => {
   if (!header?.startsWith('Bearer ')) throw unauthorized();
   const { sub } = verifyAccessToken(header.slice('Bearer '.length).trim());
   req.userId = sub;
+  touchActive(sub);
   next();
 };
 

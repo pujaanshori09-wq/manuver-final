@@ -235,6 +235,17 @@ async function main() {
     }
   }
 
+  // A few approved events (the Explore tab), hosted by a demo player so --remove clears them too.
+  const host = await prisma.user.findFirstOrThrow({ where: { email: { endsWith: DEMO_DOMAIN } }, select: { id: true } });
+  const day = 86_400_000;
+  await prisma.event.createMany({
+    data: [
+      { title: 'Bandung Night Run 10K', organizer: 'Komunitas Lari Bandung', type: 'Fun Run', category: 'Running', startsAt: new Date(now.getTime() + 12 * day), location: 'Gedung Sate', city: 'Bandung', priceIdr: 150000, quota: 500, imageUrl: img('photo-1452626038306-9aae5e071dd3'), isFeatured: true },
+      { title: 'Badminton Open GBK Cup', organizer: 'PBSI DKI Jakarta', type: 'Open Tournament', category: 'Badminton', startsAt: new Date(now.getTime() + 20 * day), location: 'Istora Senayan', city: 'Jakarta', priceIdr: 150000, quota: 320, imageUrl: img('photo-1626224583764-f87db24ac4ea') },
+      { title: 'Padel Americano Sabtu Pagi', organizer: 'Padel Dago', type: 'Komunitas', category: 'Padel', startsAt: new Date(now.getTime() + 4 * day), location: 'Padel Dago Club', city: 'Bandung', priceIdr: 0, quota: 16, imageUrl: img('photo-1554068865-24cecd4e34b8') },
+    ].map((e) => ({ ...e, creatorId: host.id, status: 'APPROVED' as const })),
+  });
+
   console.log(
     `Created ${DEMOS.length} demo players around ${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}` +
       ` (${DEMOS.filter((d) => d.likesYou).length} already like ${realUsers.length} real account(s))`,

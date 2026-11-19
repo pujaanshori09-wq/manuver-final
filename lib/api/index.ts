@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { api, storeTokens, type TokenPair } from './client';
+import { api, ApiError, storeTokens, type TokenPair } from './client';
 import { getApiBaseUrl } from './config';
 import { clearTokens, getRefreshToken } from './tokens';
 
@@ -178,6 +178,22 @@ export const meApi = {
     api<Me>('/v1/me/prompts', { method: 'PUT', body: { prompts } }),
   promptQuestions: () => api<PromptQuestion[]>('/v1/prompts/questions'),
   deleteAccount: () => api('/v1/me', { method: 'DELETE' }),
+  /** This phone's Expo push token (pushes are sent by the server only). */
+  setPushToken: (token: string) => api('/v1/me/push-token', { method: 'PUT', body: { token } }),
+  removePushToken: (token: string) => api('/v1/me/push-token', { method: 'DELETE', body: { token } }),
+};
+
+// ── Safety: blocking and reporting (server/src/modules/safety) ───────────────────
+
+export type ReportReason = 'RUDE' | 'SPAM' | 'FAKE' | 'INAPPROPRIATE' | 'UNDERAGE' | 'OTHER';
+export type BlockedPlayer = { id: string; name: string; photoUrl: string | null; blockedAt: string };
+
+export const safetyApi = {
+  block: (userId: string) => api('/v1/blocks', { body: { userId } }),
+  unblock: (userId: string) => api(`/v1/blocks/${userId}`, { method: 'DELETE' }),
+  blocked: () => api<BlockedPlayer[]>('/v1/blocks'),
+  report: (userId: string, reason: ReportReason, details?: string) =>
+    api<{ id: string }>('/v1/reports', { body: { userId, reason, ...(details ? { details } : {}) } }),
 };
 
 // ── Discover & swipes (server/src/modules/discover) ─────────────────────────────
@@ -209,10 +225,34 @@ export type DiscoverPlayer = {
 
 export type SwipeAction = 'LIKE' | 'PASS' | 'SUPER';
 
+/** What is left of the swipe allowance (server/src/modules/discover/quota.ts decides). */
+export type SwipeQuota = {
+  premium: boolean;
+  /** null = unlimited (premium). */
+  likesLeft: number | null;
+  likesResetAt: string;
+  superLeft: number;
+  superResetAt: string;
+};
+
+/** Why a swipe was refused (HTTP 429), for the quota sheet. */
+export type SwipeLimit = { kind: 'like' | 'super' | 'rate'; resetsAt: string };
+
+/** Reads a refused swipe; null for any other error. */
+export function swipeLimitFrom(e: unknown): SwipeLimit | null {
+  if (!(e instanceof ApiError) || e.status !== 429) return null;
+  const d = e.details as unknown as { kind?: string; resetsAt?: string } | undefined;
+  if (!d?.resetsAt) return null;
+  if (e.code === 'swipe_rate_limited') return { kind: 'rate', resetsAt: d.resetsAt };
+  if (e.code === 'swipe_limit_reached') return { kind: d.kind === 'super' ? 'super' : 'like', resetsAt: d.resetsAt };
+  return null;
+}
+
 export type SwipeResult = {
   isMatch: boolean;
   matchId: string | null;
   partner: { id: string; name: string; photoUrl: string | null };
+  quota: SwipeQuota;
 };
 
 export const discoverApi = {
@@ -222,7 +262,7 @@ export const discoverApi = {
     if (opts.limit) q.set('limit', String(opts.limit));
     if (opts.sports?.length) q.set('sports', opts.sports.join(','));
     const qs = q.toString();
-    return api<{ items: DiscoverPlayer[] }>(`/v1/discover${qs ? `?${qs}` : ''}`);
+    return api<{ items: DiscoverPlayer[]; quota: SwipeQuota }>(`/v1/discover${qs ? `?${qs}` : ''}`);
   },
   swipe: (targetId: string, action: SwipeAction) => api<SwipeResult>('/v1/swipes', { body: { targetId, action } }),
 };
@@ -279,9 +319,18 @@ export type Activity = {
   /** Owner only: anyone with the link can view it. */
   isPublic?: boolean;
   publicUrl?: string | null;
+  /** Detail only: speed along the route as [metres from start, km/h] (pauses left out). */
+  speed?: { points: [number, number][]; maxKmh: number } | null;
 };
 
-export type NewActivity = Omit<Activity, 'id' | 'userId' | 'route' | 'isPublic' | 'publicUrl'> & { clientId: string; polyline: string };
+export type NewActivity = Omit<Activity, 'id' | 'userId' | 'route' | 'isPublic' | 'publicUrl' | 'speed'> & {
+  clientId: string;
+  polyline: string;
+  /** Seconds since startedAt for each polyline point. */
+  pointTimes: number[];
+  /** Indices of points where recording resumed (after a pause or a vehicle stretch). */
+  segmentStarts: number[];
+};
 
 export type PublicProfile = {
   id: string;
@@ -318,4 +367,108 @@ export const activitiesApi = {
 export const usersApi = {
   get: (id: string) => api<PublicProfile>(`/v1/users/${id}`),
   activities: (id: string) => api<Activity[]>(`/v1/users/${id}/activities`),
+};
+
+// ── Explore: open sessions, SOS, events (server/src/modules/explore) ─────────────
+
+export type PostCreator = { id: string; name: string; photoUrl: string | null };
+
+export type OpenSession = {
+  id: string;
+  sport: string;
+  title: string;
+  venueName: string;
+  scheduledAt: string;
+  slotsTotal: number;
+  slotsFilled: number;
+  genderPref: GenderPreference;
+  skillNote: string | null;
+  status: 'OPEN' | 'FULL';
+  creator: PostCreator;
+  isJoined: boolean;
+  isMine: boolean;
+};
+
+export type SosPost = {
+  id: string;
+  sport: string;
+  venueName: string;
+  playTime: string;
+  slotsNeeded: number;
+  slotsLeft: number;
+  feePerPerson: number;
+  note: string | null;
+  creator: PostCreator;
+  claimedByMe: boolean;
+  isMine: boolean;
+};
+
+export type SportEvent = {
+  id: string;
+  title: string;
+  organizer: string;
+  type: string;
+  category: string;
+  startsAt: string;
+  location: string;
+  city: string;
+  /** Rupiah; 0 = free. */
+  priceIdr: number;
+  quota: number | null;
+  imageUrl: string | null;
+  isFeatured: boolean;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  registrations: number;
+  isMine: boolean;
+  isRegistered: boolean;
+};
+
+export const sessionsApi = {
+  list: (sport?: string) => api<OpenSession[]>(`/v1/sessions${sport ? `?sport=${encodeURIComponent(sport)}` : ''}`),
+  create: (body: {
+    sport: string;
+    title: string;
+    venueName: string;
+    scheduledAt: string;
+    slotsTotal: number;
+    genderPref: GenderPreference;
+    skillNote?: string | null;
+  }) => api<{ id: string }>('/v1/sessions', { body }),
+  join: (id: string) => api(`/v1/sessions/${id}/join`, { method: 'POST' }),
+  leave: (id: string) => api(`/v1/sessions/${id}/join`, { method: 'DELETE' }),
+  cancel: (id: string) => api(`/v1/sessions/${id}`, { method: 'DELETE' }),
+};
+
+export const sosApi = {
+  list: () => api<SosPost[]>('/v1/sos'),
+  create: (body: {
+    sport: string;
+    venueName: string;
+    slotsNeeded: number;
+    feePerPerson: number;
+    contactWa: string;
+    note?: string | null;
+  }) => api<{ id: string }>('/v1/sos', { body }),
+  /** The answer carries the host's WhatsApp number, given only to people who took a spot. */
+  claim: (id: string) => api<{ contactWa: string }>(`/v1/sos/${id}/claim`, { method: 'POST' }),
+  cancel: (id: string) => api(`/v1/sos/${id}`, { method: 'DELETE' }),
+};
+
+export const eventsApi = {
+  list: () => api<SportEvent[]>('/v1/events'),
+  get: (id: string) => api<SportEvent>(`/v1/events/${id}`),
+  create: (body: {
+    title: string;
+    organizer: string;
+    type: string;
+    category: string;
+    startsAt: string;
+    location: string;
+    city: string;
+    priceIdr: number;
+    quota?: number | null;
+    imageUrl?: string | null;
+  }) => api<SportEvent>('/v1/events', { body }),
+  register: (id: string) => api<SportEvent>(`/v1/events/${id}/register`, { method: 'POST' }),
+  unregister: (id: string) => api<SportEvent>(`/v1/events/${id}/register`, { method: 'DELETE' }),
 };

@@ -8,8 +8,8 @@ import { ActivityIndicator, Alert, Platform, ScrollView, Share, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { ShareCard, type CardStats, type CardTemplate } from '@/components/ShareCard';
-import { Button, Chip, IconButton } from '@/components/ui';
-import { decodeRoute, formatDuration, formatKm, formatPace, formatSpeed, trimEnds, usesSpeed } from '@/lib/activity';
+import { Button, Chip, IconButton, Toggle } from '@/components/ui';
+import { decodeRoute, formatDuration, formatKm, formatPace, formatSpeed, privacyTrim, usesSpeed } from '@/lib/activity';
 import { activitiesApi, type Activity } from '@/lib/api';
 import { useT, type TKey } from '@/lib/i18n';
 import { makeStyles, radius, space, type, useTheme } from '@/lib/theme';
@@ -36,6 +36,7 @@ export default function ShareActivity() {
   const [stats, setStats] = useState<CardStats>({ distance: true, pace: true, time: true });
   const [busy, setBusy] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [hideEnds, setHideEnds] = useState(true);
 
   const { data: a, isLoading } = useQuery({ queryKey: key, enabled: !!id, queryFn: () => activitiesApi.get(id) });
 
@@ -108,7 +109,9 @@ export default function ShareActivity() {
 
   const cardW = Math.min(screenW - space.lg * 2, 300);
   // Shared images go to strangers: cut the route ends like the public page does.
-  const route = a ? trimEnds(decodeRoute(a.route)) : [];
+  // Owner's choice for this image only; the public link and profile always hide the ends.
+  const full = a ? decodeRoute(a.route) : [];
+  const route = hideEnds ? privacyTrim(full) : full;
   const canMap = route.length > 1;
 
   return (
@@ -132,6 +135,14 @@ export default function ShareActivity() {
             <ShareCard ref={card} a={a} route={route} template={template} stats={stats} width={cardW} onReady={setMapReady} />
           </View>
           {template === 'clear' && <Text style={s.hint}>{tr('share.previewHint')}</Text>}
+
+          <View style={s.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.rowLabel}>{tr('share.hideEnds')}</Text>
+              <Text style={s.rowHint}>{tr('share.hideEndsHint')}</Text>
+            </View>
+            <Toggle value={hideEnds} onValueChange={setHideEnds} accessibilityLabel={tr('share.hideEnds')} />
+          </View>
 
           <View style={s.chips}>
             {TEMPLATES.filter((x) => x.id !== 'map' || canMap).map((x) => (
@@ -172,5 +183,8 @@ const useStyles = makeStyles((t) =>
     stage: { alignItems: 'center', justifyContent: 'center', borderRadius: radius.card, overflow: 'hidden', paddingVertical: space.md, backgroundColor: t.surfaceMuted },
     hint: { ...type.caption, color: t.textSecondary, textAlign: 'center' },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, justifyContent: 'center' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: t.surface, borderRadius: radius.card, paddingHorizontal: space.md, paddingVertical: space.sm },
+    rowLabel: { ...type.label, color: t.text },
+    rowHint: { ...type.caption, color: t.textSecondary },
   }),
 );

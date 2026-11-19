@@ -13,7 +13,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { sessionsApi } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api/errors';
 
 import { useTheme, makeStyles, type Theme, fonts } from '@/lib/theme';
 import { useT, type TKey } from '@/lib/i18n';
@@ -76,46 +77,19 @@ export default function CreateSessionSheet({
     setLoading(true);
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        Alert.alert(tr('sheets.authTitle'), tr('sheets.authBody'));
-        return;
-      }
-
       // Calculate scheduled ISO timestamp (UTC)
       const scheduledTime = new Date(Date.now() + hoursAhead * 3600 * 1000).toISOString();
 
-      // 1. Insert session into open_sessions
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('open_sessions')
-        .insert({
-          creator_id: user.id,
-          sport,
-          title: title.trim(),
-          venue_name: venue.trim(),
-          scheduled_at: scheduledTime,
-          duration_min: 120,
-          slots_total: slots,
-          slots_filled: 1, // Host is participant #1
-          gender_pref: genderPref,
-          skill_note: skillNote.trim() || null,
-          status: 'open',
-        })
-        .select()
-        .single();
-
-      if (sessionError) throw sessionError;
-
-      // 2. Add creator into session_participants so trigger keeps count accurate
-      if (sessionData) {
-        await supabase.from('session_participants').insert({
-          session_id: sessionData.id,
-          user_id: user.id,
-        });
-      }
+      // The server adds the host as the first player.
+      await sessionsApi.create({
+        sport,
+        title: title.trim(),
+        venueName: venue.trim(),
+        scheduledAt: scheduledTime,
+        slotsTotal: slots,
+        genderPref: genderPref === 'male' ? 'MEN' : genderPref === 'female' ? 'WOMEN' : 'ALL',
+        skillNote: skillNote.trim() || null,
+      });
 
       Alert.alert(tr('sheets.sessionCreated'), tr('sheets.sessionCreatedBody'));
 
@@ -128,7 +102,7 @@ export default function CreateSessionSheet({
       onClose();
     } catch (err: any) {
       console.error('Error creating session:', err);
-      Alert.alert(tr('sheets.sessionFailed'), err.message || tr('sheets.systemError'));
+      Alert.alert(tr('sheets.sessionFailed'), apiErrorMessage(err, tr));
     } finally {
       setLoading(false);
     }

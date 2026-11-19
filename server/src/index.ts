@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
+import { startHousekeeping } from './lib/housekeeping.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 
@@ -9,6 +10,7 @@ const server = createServer(app);
 
 server.listen(env.PORT, () => {
   logger.info(`Manuver API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  startHousekeeping();
 });
 
 // Graceful shutdown: finish in-flight requests, then close the DB pool.

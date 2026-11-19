@@ -6,9 +6,12 @@ import { env, isTest } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { apiByIp } from './middleware/rateLimits.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { activitiesRouter, usersRouter } from './modules/activities/activities.routes.js';
 import { matchesRouter, messagesRouter } from './modules/chat/chat.routes.js';
+import { eventsRouter, sessionsRouter, sosRouter } from './modules/explore/explore.routes.js';
+import { blocksRouter, reportsRouter } from './modules/safety/safety.routes.js';
 import { shareRouter } from './modules/share/share.routes.js';
 import { discoverRouter, swipesRouter } from './modules/discover/discover.routes.js';
 import { meRouter, promptsRouter } from './modules/me/me.routes.js';
@@ -31,7 +34,7 @@ export function createApp() {
   );
   // GPS routes are the only large bodies; everything else keeps the tight limit.
   const json = express.json({ limit: '100kb' });
-  const routeJson = express.json({ limit: '300kb' });
+  const routeJson = express.json({ limit: '700kb' }); // route + one time per point
   app.use((req, res, next) => (req.path === '/v1/activities' ? routeJson : json)(req, res, next));
   if (!isTest) app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/health' } }));
 
@@ -56,7 +59,12 @@ export function createApp() {
   v1.use('/messages', messagesRouter);
   v1.use('/activities', activitiesRouter);
   v1.use('/users', usersRouter);
-  app.use('/v1', v1);
+  v1.use('/blocks', blocksRouter);
+  v1.use('/reports', reportsRouter);
+  v1.use('/sessions', sessionsRouter);
+  v1.use('/sos', sosRouter);
+  v1.use('/events', eventsRouter);
+  app.use('/v1', apiByIp, v1);
   // Public activity pages, outside the API: /a/<code>
   app.use('/a', shareRouter);
 

@@ -16,7 +16,9 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../../lib/supabase';
+import { DateTimeField } from '@/components/DateTimeField';
+import { eventsApi } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api/errors';
 
 import { useTheme, makeStyles, type Theme, fonts } from '@/lib/theme';
 
@@ -50,7 +52,7 @@ export default function CreateEventScreen() {
   // Shared fields
   const [title, setTitle] = useState('');
   const [organizer, setOrganizer] = useState('');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [city, setCity] = useState('');
   const [sport, setSport] = useState('');
@@ -71,34 +73,26 @@ export default function CreateEventScreen() {
 
     try {
       setLoading(true);
-      const { data: userData } = await supabase.auth.getUser();
-
-      const { error } = await supabase.from('events').insert([
-        {
-          title,
-          organizer: organizer || userData?.user?.email?.split('@')[0] || 'Unknown',
-          date,
-          location,
-          city,
-          category: sport,
-          type: isComps ? `Kompetisi · ${compFormat}` : `Komunitas · ${userType}`,
-          participants: quota ? `0/${quota}` : '0',
-          image_url: IMAGES[mode],
-          price: price ? `Rp ${price}` : 'Gratis',
-          creator_id: userData?.user?.id,
-          status: 'approved', // Auto-approved for beta (no admin panel yet)
-        },
-      ]);
-
-      if (error) throw error;
-
+      // New events wait for review before others can see them.
+      await eventsApi.create({
+        title: title.trim(),
+        organizer: organizer.trim() || tr('createEvent.host'),
+        startsAt: date.toISOString(),
+        location: location.trim(),
+        city: city.trim(),
+        category: sport,
+        type: isComps ? `Kompetisi · ${compFormat}` : `Komunitas · ${userType}`,
+        quota: quota ? parseInt(quota.replace(/[^0-9]/g, ''), 10) || null : null,
+        imageUrl: IMAGES[mode],
+        priceIdr: price ? parseInt(price.replace(/[^0-9]/g, ''), 10) || 0 : 0,
+      });
       Alert.alert(
         isComps ? tr('createEvent.compCreated') : tr('createEvent.meetCreated'),
         tr('createEvent.createdBody'),
         [{ text: tr('common.ok'), onPress: () => router.back() }]
       );
-    } catch (e: any) {
-      Alert.alert(tr('createEvent.error'), e.message);
+    } catch (e) {
+      Alert.alert(tr('createEvent.error'), apiErrorMessage(e, tr));
     } finally {
       setLoading(false);
     }
@@ -225,7 +219,7 @@ export default function CreateEventScreen() {
             'person-outline'
           )}
 
-          {renderInput(tr('createEvent.date'), date, setDate, tr('createEvent.datePh'), 'calendar-outline')}
+          <DateTimeField label={tr('createEvent.date')} placeholder={tr('createEvent.datePh')} value={date} onChange={setDate} />
           {renderInput(tr('createEvent.venue'), location, setLocation, tr('createEvent.venuePh'), 'location-outline')}
           {renderInput(tr('createEvent.city'), city, setCity, tr('createEvent.cityPh'), 'business-outline')}
 

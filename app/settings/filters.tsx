@@ -42,7 +42,7 @@ const DEFAULT_FILTERS: MatchFilterSettings = {
   maxDistance: 25,
   strictDistance: true,
   minAge: 20,
-  maxAge: 32,
+  maxAge: 40,
   strictAge: false,
   selectedSports: ALL_FILTER_SPORT_IDS,
   showMyProfile: true,
@@ -254,10 +254,6 @@ export default function MatchFiltersScreen() {
             <Text style={styles.highlightBadge}>{maxDistance} km</Text>
           </View>
 
-          <Text style={styles.label}>
-            {tr('filters.maxDistance')} <Text style={styles.boldText}>{maxDistance} km</Text>
-          </Text>
-
           {/* Interactive touch/drag slider track */}
           <View
             ref={trackViewRef}
@@ -341,8 +337,6 @@ export default function MatchFiltersScreen() {
             </Text>
           </View>
 
-          <Text style={styles.label}>{tr('filters.ageRangeHint')}</Text>
-
           <View style={styles.ageInputsContainer}>
             <View style={styles.ageInputBox}>
               <Text style={styles.ageInputLabel}>{tr('filters.min')}</Text>
@@ -409,10 +403,6 @@ export default function MatchFiltersScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.label}>
-            {tr('filters.sportsHint')}
-          </Text>
 
           <View style={styles.sportsGrid}>
             {AVAILABLE_SPORTS.map((sport) => {
@@ -550,14 +540,14 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 16,
+    padding: 12,
+    paddingBottom: 32,
+    gap: 10,
   },
   sectionCard: {
     backgroundColor: t.surface,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: t.hairline,
   },
@@ -565,7 +555,7 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -604,7 +594,7 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     fontFamily: 'Lato_700Bold',
   },
   sliderInteractiveWrapper: {
-    height: 36,
+    height: 30,
     justifyContent: 'center',
     position: 'relative',
     marginHorizontal: 10,
@@ -622,7 +612,7 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
   },
   sliderThumb: {
     position: 'absolute',
-    top: 6,
+    top: 3,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -646,8 +636,8 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    marginTop: 2,
-    marginBottom: 10,
+    marginTop: 0,
+    marginBottom: 8,
   },
   rangeSubText: {
     fontSize: 11,
@@ -662,7 +652,7 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
   },
   presetChip: {
     flex: 1,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: t.surfaceMuted,
     alignItems: 'center',
@@ -685,7 +675,7 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: t.hairline,
-    marginVertical: 14,
+    marginVertical: 10,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -717,7 +707,8 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     flex: 1,
     backgroundColor: t.surfaceMuted,
     borderRadius: 12,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: t.border,
   },
@@ -726,14 +717,14 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
     fontFamily: 'Lato_700Bold',
     color: t.textSecondary,
     letterSpacing: 0.8,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   ageRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   ageInput: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Lato_700Bold',
     color: t.text,
     padding: 0,
@@ -756,14 +747,14 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
   sportsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   sportPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
     borderRadius: 20,
     backgroundColor: t.surfaceMuted,
     borderWidth: 1,

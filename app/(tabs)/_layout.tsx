@@ -1,9 +1,9 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { FloatingTabBar, type TabIcon } from '@/components/ui/TabBar';
 import { useT } from '@/lib/i18n';
-import { supabase } from '../../lib/supabase';
-import { registerForPushNotifications, savePushToken } from '../../lib/pushNotifications';
+import { useAuth } from '@/lib/auth';
+import { listenForPushTaps, syncPushToken } from '../../lib/pushNotifications';
 
 // Same icons as before — only the container was restyled.
 const ICONS: Record<string, TabIcon> = {
@@ -16,18 +16,17 @@ const ICONS: Record<string, TabIcon> = {
 export default function TabLayout() {
   const tr = useT();
 
-  useEffect(() => {
-    async function setupPush() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
+  const { me } = useAuth();
+  const router = useRouter();
 
-      const token = await registerForPushNotifications();
-      if (token) {
-        await savePushToken(session.user.id, token);
-      }
-    }
-    setupPush();
-  }, []);
+  // Signed in: register this phone for pushes (the server sends them), and open the chat a push is about.
+  useEffect(() => {
+    if (!me?.id) return;
+    syncPushToken();
+    let stop = () => {};
+    listenForPushTaps((matchId) => router.push({ pathname: '/chat/[id]', params: { id: matchId } })).then((s) => (stop = s));
+    return () => stop();
+  }, [me?.id, router]);
 
   return (
     <Tabs
