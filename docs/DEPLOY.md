@@ -10,7 +10,7 @@ migrations, then serves on `$PORT`. Health check: `GET /health`.
 |---|---|---|
 | PostgreSQL 16 | Neon, Supabase Postgres, Railway, or your VPS | Copy the connection string with `?sslmode=require` if the host asks for SSL. Turn on daily backups. |
 | API hosting | Railway, Render, Fly.io, or a VPS with Docker | Point it at `server/` (Dockerfile). |
-| Photo bucket | Cloudflare R2 | Public access on (r2.dev or your own domain) + an API token with Object Read & Write. |
+| Photo bucket | Supabase Storage (free, no card) — or Backblaze B2 / Cloudflare R2 | Any S3-compatible bucket with public read; see "Photo bucket" below. |
 | Email | Resend | Verify your domain so emails reach everyone, not only your own address. |
 | Push | Expo (EAS) | Needed for the app build; see step 4. |
 
@@ -27,11 +27,43 @@ RESEND_API_KEY=re_…
 EMAIL_FROM=Manuver <noreply@yourdomain.com>
 GOOGLE_CLIENT_ID=… / GOOGLE_CLIENT_SECRET=…   # optional; register https://api.yourdomain.com/v1/auth/google/callback
 STORAGE_DRIVER=s3
-S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
-S3_BUCKET=manuver-photos
+S3_ENDPOINT=…  S3_REGION=…  S3_BUCKET=manuver-photos
 S3_ACCESS_KEY_ID=… / S3_SECRET_ACCESS_KEY=…
-S3_PUBLIC_URL=https://pub-xxxx.r2.dev
+S3_PUBLIC_URL=…  S3_FORCE_PATH_STYLE=…        # values per provider below
 ```
+
+### Photo bucket (pick one)
+**Supabase Storage — free (about 1 GB), no card.** About 3,000 profile photos at 1600 px.
+1. supabase.com → New project (region Singapore). Only Storage is used; the app does not use Supabase otherwise.
+2. Storage → New bucket `manuver-photos` → **Public bucket** on.
+3. Project Settings → Storage → **S3 Connection**: copy the endpoint and region, then **New access key**
+   (the secret is shown once).
+```
+S3_ENDPOINT=https://<project-ref>.supabase.co/storage/v1/s3
+S3_REGION=<region shown there, e.g. ap-southeast-1>
+S3_BUCKET=manuver-photos
+S3_PUBLIC_URL=https://<project-ref>.supabase.co/storage/v1/object/public/manuver-photos
+S3_FORCE_PATH_STYLE=true
+```
+
+**Backblaze B2 — free tier, more room.** Check on their pricing page whether a card is asked.
+Bucket `manuver-photos` set to Public; App Keys → Add key with Read and Write on that bucket (keyID = access key,
+applicationKey = secret). The S3 endpoint is on the bucket page.
+```
+S3_ENDPOINT=https://s3.<region>.backblazeb2.com
+S3_REGION=<region, e.g. us-west-004>
+S3_PUBLIC_URL=https://manuver-photos.s3.<region>.backblazeb2.com
+S3_FORCE_PATH_STYLE=false
+```
+
+**Cloudflare R2 — free tier, may ask for a payment method.**
+```
+S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_PUBLIC_URL=https://pub-xxxx.r2.dev
+S3_FORCE_PATH_STYLE=false
+```
+Switching later only means new photos go to the new bucket; move existing files across before switching.
 Generate a secret: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
 The server refuses to start in production with the example secrets, two equal secrets, a plain-http
 `PUBLIC_BASE_URL`, no `RESEND_API_KEY`, or an incomplete bucket setup, and lists what is wrong.

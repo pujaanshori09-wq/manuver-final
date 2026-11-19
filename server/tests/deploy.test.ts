@@ -79,7 +79,19 @@ describe('production configuration', () => {
   };
 
   it('accepts a complete setup', () => {
-    expect(parseEnv(good)).toMatchObject({ NODE_ENV: 'production', STORAGE_DRIVER: 's3', S3_REGION: 'auto' });
+    expect(parseEnv(good)).toMatchObject({ NODE_ENV: 'production', STORAGE_DRIVER: 's3', S3_REGION: 'auto', S3_FORCE_PATH_STYLE: false });
+  });
+
+  it('takes Supabase Storage, which wants path-style requests', () => {
+    const supabase = parseEnv({
+      ...good,
+      S3_ENDPOINT: 'https://abcd.supabase.co/storage/v1/s3',
+      S3_REGION: 'ap-southeast-1',
+      S3_PUBLIC_URL: 'https://abcd.supabase.co/storage/v1/object/public/manuver-photos',
+      S3_FORCE_PATH_STYLE: 'true',
+    });
+    expect(supabase.S3_FORCE_PATH_STYLE).toBe(true);
+    expect(() => parseEnv({ ...good, S3_FORCE_PATH_STYLE: 'yes' })).toThrow(/S3_FORCE_PATH_STYLE/);
   });
 
   it('refuses the example secrets, a shared secret and a plain-http address', () => {

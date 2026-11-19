@@ -7,7 +7,7 @@ import { env } from '../config/env.js';
 /**
  * File storage behind a tiny interface, so the services never know where photos live.
  *   local — files on this server's disk, served at /uploads (development, tests)
- *   s3    — Cloudflare R2 or any S3-compatible bucket (production: hosting disks are wiped on deploy)
+ *   s3    — any S3-compatible bucket: Supabase Storage, Backblaze B2, Cloudflare R2 (production: hosting disks are wiped on deploy)
  *
  * Keys look like "users/<userId>/<uuid>.jpg". Local URLs are returned *relative* ("/uploads/<key>"):
  * the app prefixes them with the API host it is talking to, which keeps links working through
@@ -101,6 +101,7 @@ export const storage: Storage =
         new S3Client({
           region: env.S3_REGION,
           endpoint: env.S3_ENDPOINT,
+          forcePathStyle: env.S3_FORCE_PATH_STYLE,
           credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
         }),
         env.S3_BUCKET,

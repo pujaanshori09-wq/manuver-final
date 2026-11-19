@@ -33,7 +33,7 @@ const EnvSchema = z
     CORS_ORIGINS: list,
     PUBLIC_BASE_URL: z.string().url().default('http://localhost:4000'),
 
-    // Photo storage: "local" disk (development) or an S3-compatible bucket such as Cloudflare R2.
+    // Photo storage: "local" disk (development) or an S3-compatible bucket (Supabase Storage, Backblaze B2, Cloudflare R2).
     STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
     UPLOAD_DIR: z.string().default('uploads'),
     /** R2: https://<account id>.r2.cloudflarestorage.com */
@@ -44,6 +44,14 @@ const EnvSchema = z
     S3_SECRET_ACCESS_KEY: z.string().default(''),
     /** Public address of the bucket (r2.dev subdomain or your own domain), without a trailing slash. */
     S3_PUBLIC_URL: z.string().default(''),
+    /**
+     * "true" sends requests as <endpoint>/<bucket>/<key> instead of <bucket>.<endpoint>/<key>.
+     * Supabase Storage needs it; R2 and Backblaze B2 work either way.
+     */
+    S3_FORCE_PATH_STYLE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
   })
   .superRefine((e, ctx) => {
     if (e.STORAGE_DRIVER === 's3') {
