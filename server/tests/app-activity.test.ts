@@ -16,7 +16,7 @@ import {
   privacyTrim,
   SPEED_LIMITS,
   type TrackPoint,
-} from '../../lib/activity';
+} from '../../lib/activity.js';
 
 it('app route helpers match the server', () => {
 // A 1 km straight line, one fix every 10 m, at 5:00 per km (3.33 m/s → 3 s per fix).

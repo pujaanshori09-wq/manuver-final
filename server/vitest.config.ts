@@ -12,6 +12,9 @@ const testDb = process.env.TEST_DATABASE_URL;
 if (!testDb) throw new Error('TEST_DATABASE_URL is required to run tests');
 
 export default defineConfig({
+  // Always this folder's tsconfig, also for the app files some tests import: without it Vite would find the
+  // app's tsconfig (which extends expo/tsconfig.base) and fail wherever only server/ is installed, like CI.
+  tsconfig: './tsconfig.json',
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
