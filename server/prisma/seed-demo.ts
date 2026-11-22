@@ -2,6 +2,7 @@
 //   npm run db:seed:demo                 → (re)create demo players around the newest located account
 //   npm run db:seed:demo -- -6.9 107.6   → around a given latitude / longitude
 //   npm run db:seed:demo -- --remove     → delete every demo player
+//   npm run db:seed:demo -- --communities → only the community accounts (safe on a live database)
 //
 // Demo accounts use the reserved ".test" domain, have no password (nobody can sign in as them),
 // and their photos are public Unsplash URLs. Half of them have already liked every real account,
@@ -209,6 +210,9 @@ async function main() {
     return;
   }
 
+  // --communities: only the community accounts (fine on a live database; no fake players or events).
+  const onlyCommunities = args.includes('--communities');
+  const demos = onlyCommunities ? DEMOS.filter((d) => d.community) : DEMOS;
   const c = await centre(args);
   const kmLat = 1 / 111;
   const kmLon = 1 / (111 * Math.cos((c.latitude * Math.PI) / 180));
@@ -219,7 +223,7 @@ async function main() {
   });
   const now = new Date();
 
-  for (const [i, d] of DEMOS.entries()) {
+  for (const [i, d] of demos.entries()) {
     const user = await prisma.user.create({
       data: {
         email: `demo${i + 1}${DEMO_DOMAIN}`,
@@ -264,6 +268,11 @@ async function main() {
         skipDuplicates: true,
       });
     }
+  }
+
+  if (onlyCommunities) {
+    console.log(`Created ${demos.length} community accounts`);
+    return;
   }
 
   // A few approved events (the Explore tab), hosted by a demo player so --remove clears them too.
