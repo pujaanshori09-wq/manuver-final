@@ -349,6 +349,7 @@ export const th: Dictionary = {
     inviteShort: "ชวนเล่นกีฬา",
     moreInfo: 'เปิดโปรไฟล์เต็ม',
     lookingFor: 'กำลังหาคู่เล่น',
+    communityPill: "คอมมูนิตี้ · เข้าร่วมทันที",
     photoVerified: 'ยืนยันรูปแล้ว',
     kmAway: 'ห่าง {n} กม.',
     mainSports: 'กีฬาหลัก',

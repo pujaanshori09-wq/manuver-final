@@ -278,7 +278,8 @@ const useStylesTheme = makeStyles((t: Theme) => StyleSheet.create({
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: t.text, ...type.body, outlineWidth: 0 } as any,
-  categoryScroll: { flexGrow: 0 },
+  // flexShrink 0: otherwise the event list below squeezes the row and clips the chips on iOS.
+  categoryScroll: { flexGrow: 0, flexShrink: 0 },
   categoryList: { paddingHorizontal: space.md, gap: space.xs, paddingVertical: space.sm },
   scroll: { paddingHorizontal: space.md },
   section: { marginBottom: space.lg },

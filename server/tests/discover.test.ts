@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma.js';
+import { interleave } from '../src/modules/discover/discover.service.js';
+import { LIMITS } from '../src/modules/discover/quota.js';
 import { api, registerUser, resetDb } from './helpers.js';
 
 beforeEach(resetDb);
@@ -234,5 +236,44 @@ describe('POST /swipes', () => {
     const b = await player({ name: 'B' });
     const res = await api().post('/v1/swipes').set(auth(fresh.accessToken)).send({ targetId: b.id, action: 'LIKE' });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('community accounts', () => {
+  const community = async (name: string, sports: string[]) => {
+    const c = await player({ name, sports, location: far, age: 40 });
+    await prisma.profile.update({ where: { userId: c.id }, data: { isCommunity: true } });
+    return c;
+  };
+
+  it('interleave puts a community on every 5th swipe and still shows one when players run out', () => {
+    const people = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
+    expect(interleave(people, ['c1', 'c2'], 0, 10)).toEqual(['p1', 'p2', 'p3', 'p4', 'c1', 'p5', 'p6', 'p7', 'p8', 'c2']);
+    // Two swipes already done and one card still in the app: the next card is swipe 4.
+    expect(interleave(people, ['c1'], 3, 4)).toEqual(['p1', 'c1', 'p2', 'p3']);
+    expect(interleave(['p1'], ['c1', 'c2'], 0, 20)).toEqual(['p1', 'c1']);
+    expect(interleave(people, [], 0, 5)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5']);
+  });
+
+  it('shows the community sharing my sports as the 5th card, ignoring distance and age filters', async () => {
+    const me = await player({ name: 'Me', sports: ['lari'] });
+    for (const n of ['A', 'B', 'C', 'D', 'E']) await player({ name: n });
+    await community('Badminton Club', ['badminton']);
+    await community('Lari Club', ['lari']);
+    const items = await feed(me);
+    expect(items).toHaveLength(6);
+    expect(items[4]).toMatchObject({ name: 'Lari Club', isCommunity: true });
+    expect(names(items.filter((i) => !i.isCommunity)).sort()).toEqual(['A', 'B', 'C', 'D', 'E']);
+    expect(items[0]!.isCommunity).toBe(false);
+  });
+
+  it('a Like on a community matches at once and does not use a daily Like', async () => {
+    const me = await player({ name: 'Me' });
+    const club = await community('Club', ['badminton']);
+    const res = await swipe(me, club.id, 'LIKE');
+    expect(res.status).toBe(200);
+    expect(res.body.isMatch).toBe(true);
+    expect(res.body.quota.likesLeft).toBe(LIMITS.freeLikesPerDay);
+    expect(names(await feed(me))).not.toContain('Club');
   });
 });

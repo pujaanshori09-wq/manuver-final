@@ -349,6 +349,7 @@ export const ru: Dictionary = {
     inviteShort: "Позвать",
     moreInfo: 'Открыть профиль',
     lookingFor: 'Ищет партнёра',
+    communityPill: "Сообщество · вступить сразу",
     photoVerified: 'Фото подтверждено',
     kmAway: '{n} км от вас',
     mainSports: 'Основные виды спорта',

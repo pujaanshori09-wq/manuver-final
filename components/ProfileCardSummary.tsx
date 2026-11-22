@@ -83,7 +83,7 @@ export default function ProfileCardSummary({ profile, onExpandPress, heroHeight,
 
         <View style={s.lookingPill}>
           <View style={s.liveDot} />
-          <Text style={s.lookingText}>{tr('discover.lookingFor')}</Text>
+          <Text style={s.lookingText}>{tr(profile.isCommunity ? 'discover.communityPill' : 'discover.lookingFor')}</Text>
         </View>
 
         <LinearGradient

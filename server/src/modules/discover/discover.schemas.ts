@@ -16,6 +16,8 @@ export const DiscoverQuery = z
         v ? [...new Set(v.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))].slice(0, 12) : undefined,
       )
       .pipe(z.array(SportId).optional()),
+    /** Cards the app still holds before this page, so community cards stay on every 5th swipe. */
+    ahead: z.coerce.number().int().min(0).max(100).default(0),
   })
   .refine((v) => v.ageMin === undefined || v.ageMax === undefined || v.ageMin <= v.ageMax, {
     message: 'ageMin must be at most ageMax',

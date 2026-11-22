@@ -349,6 +349,7 @@ export const ja: Dictionary = {
     inviteShort: "スポーツに誘う",
     moreInfo: 'プロフィールを見る',
     lookingFor: '相手を探しています',
+    communityPill: "コミュニティ · すぐ参加",
     photoVerified: '写真認証済み',
     kmAway: '{n} km先',
     mainSports: 'メインのスポーツ',

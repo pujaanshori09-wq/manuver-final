@@ -23,7 +23,7 @@ const img = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=c
 type Demo = {
   name: string;
   age: number;
-  gender: 'MALE' | 'FEMALE';
+  gender: 'MALE' | 'FEMALE' | 'OTHER';
   city: string;
   /** km north / east of the centre. */
   offset: [number, number];
@@ -33,6 +33,8 @@ type Demo = {
   availability: string[];
   photos: string[];
   likesYou: boolean;
+  /** A community account: every 5th Discover card, a Like matches at once. */
+  community?: boolean;
 };
 
 const DEMOS: Demo[] = [
@@ -140,6 +142,34 @@ const DEMOS: Demo[] = [
     photos: [img('photo-1539571696357-5a69c17a67c6')],
     likesYou: false,
   },
+  {
+    name: 'Bandung Runners',
+    age: 30,
+    gender: 'OTHER',
+    city: 'Bandung',
+    offset: [2, -1],
+    sports: [{ id: 'lari', level: '6+ thn' }],
+    skill: 'Semua level',
+    bio: 'Komunitas lari Bandung. Lari bareng tiap Selasa malam & Minggu pagi, semua pace diterima.',
+    availability: ['Malam', 'Akhir Pekan'],
+    photos: [img('photo-1452626038306-9aae5e071dd3')],
+    likesYou: false,
+    community: true,
+  },
+  {
+    name: 'Smash Badminton Club',
+    age: 30,
+    gender: 'OTHER',
+    city: 'Bandung',
+    offset: [-1, 2],
+    sports: [{ id: 'badminton', level: '6+ thn' }],
+    skill: 'Semua level',
+    bio: 'Main badminton bareng tiap Rabu & Sabtu. Gabung, kenalan, langsung main.',
+    availability: ['Malam', 'Akhir Pekan'],
+    photos: [img('photo-1626224583764-f87db24ac4ea')],
+    likesYou: false,
+    community: true,
+  },
 ];
 
 const PROMPT_ANSWERS = [
@@ -212,6 +242,7 @@ async function main() {
             locationUpdatedAt: now,
             termsAcceptedAt: now,
             onboardingCompletedAt: now,
+            isCommunity: d.community ?? false,
             lastActiveAt: new Date(now.getTime() - i * 60_000),
           },
         },

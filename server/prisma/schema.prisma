@@ -177,6 +177,8 @@ model Profile {
   termsAcceptedAt       DateTime?
   onboardingCompletedAt DateTime?
   flaggedForReview      Boolean   @default(false)
+  /// A community account: shown as every 5th Discover card; a Like matches at once (set in Prisma Studio).
+  isCommunity           Boolean   @default(false)
 
   lastActiveAt DateTime @default(now())
   createdAt    DateTime @default(now())

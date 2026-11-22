@@ -349,6 +349,7 @@ export const es: Dictionary = {
     inviteShort: "Invitar",
     moreInfo: 'Ver perfil completo',
     lookingFor: 'Busca compañero',
+    communityPill: "Comunidad · únete al instante",
     photoVerified: 'Foto verificada',
     kmAway: 'a {n} km',
     mainSports: 'Deportes principales',

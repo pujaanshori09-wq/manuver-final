@@ -15,6 +15,7 @@ function toProfile(p: DiscoverPlayer, language: string): Profile {
   const photos = p.photos.map((u) => assetUrl(u)).filter((u): u is string => !!u);
   return {
     id: p.id,
+    isCommunity: p.isCommunity,
     nama: p.name,
     age: p.age ?? undefined,
     umur: p.age ?? undefined,
@@ -51,9 +52,9 @@ export function useProfiles() {
   // Set when the server refuses a swipe (quota used up or swiping too fast).
   const [swipeLimit, setSwipeLimit] = useState<SwipeLimit | null>(null);
 
-  const fetchPage = async () => {
+  const fetchPage = async (ahead = 0) => {
     const sports = sportsQuery(await loadSportFilter());
-    const { items } = await discoverApi.list({ sports, limit: PAGE });
+    const { items } = await discoverApi.list({ sports, limit: PAGE, ahead });
     return items.map((p) => toProfile(p, language));
   };
 
@@ -65,7 +66,7 @@ export function useProfiles() {
   } = useQuery({
     // Re-run when the account or the saved discovery preferences change.
     queryKey: [...QUERY_KEY, me?.id, me?.profile.ageMin, me?.profile.ageMax, me?.profile.maxDistanceKm, me?.profile.hasLocation],
-    queryFn: fetchPage,
+    queryFn: () => fetchPage(),
     enabled: !!me?.profile.onboardingCompleted,
   });
 
@@ -79,7 +80,7 @@ export function useProfiles() {
     if (left > 3 || loadingMore.current) return;
     loadingMore.current = true;
     try {
-      const fresh = await fetchPage();
+      const fresh = await fetchPage(left);
       setDeck((old) => {
         const seen = new Set(old.map((p) => p.id));
         return [...old, ...fresh.filter((p) => !seen.has(p.id))];

@@ -347,6 +347,7 @@ export const en = {
     inviteShort: "Invite to Sport",
     moreInfo: 'Open full profile',
     lookingFor: 'Looking for a partner',
+    communityPill: "Community · join instantly",
     photoVerified: 'Photo verified',
     kmAway: '{n} km away',
     mainSports: 'Main sports',

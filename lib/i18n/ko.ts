@@ -349,6 +349,7 @@ export const ko: Dictionary = {
     inviteShort: "운동 초대",
     moreInfo: '프로필 전체 보기',
     lookingFor: '메이트 찾는 중',
+    communityPill: "커뮤니티 · 바로 참여",
     photoVerified: '사진 인증됨',
     kmAway: '{n}km 거리',
     mainSports: '주 종목',

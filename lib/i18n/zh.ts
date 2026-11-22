@@ -349,6 +349,7 @@ export const zh: Dictionary = {
     inviteShort: "约运动",
     moreInfo: '查看完整资料',
     lookingFor: '正在找搭子',
+    communityPill: "社群 · 立即加入",
     photoVerified: '照片已验证',
     kmAway: '距离 {n} 公里',
     mainSports: '主要运动',

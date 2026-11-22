@@ -2,6 +2,7 @@ export interface Profile {
   id: string;
   nama: string;
   foto_url: string;
+  isCommunity?: boolean;
   alamat?: string;
   bio?: string;
   pekerjaan?: string;

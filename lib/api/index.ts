@@ -199,6 +199,8 @@ export const safetyApi = {
 // ── Discover & swipes (server/src/modules/discover) ─────────────────────────────
 
 export type DiscoverPlayer = {
+  /** A community account (every 5th card); a Like there is a match straight away. */
+  isCommunity: boolean;
   id: string;
   name: string;
   age: number | null;
@@ -257,9 +259,11 @@ export type SwipeResult = {
 
 export const discoverApi = {
   /** Age and distance come from the saved profile; `sports` narrows the feed when given. */
-  list: (opts: { sports?: string[]; limit?: number } = {}) => {
+  /** `ahead` = cards the app still holds, so community cards stay on every 5th swipe. */
+  list: (opts: { sports?: string[]; limit?: number; ahead?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.limit) q.set('limit', String(opts.limit));
+    if (opts.ahead) q.set('ahead', String(opts.ahead));
     if (opts.sports?.length) q.set('sports', opts.sports.join(','));
     const qs = q.toString();
     return api<{ items: DiscoverPlayer[]; quota: SwipeQuota }>(`/v1/discover${qs ? `?${qs}` : ''}`);

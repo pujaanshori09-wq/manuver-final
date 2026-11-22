@@ -349,6 +349,7 @@ export const vi: Dictionary = {
     inviteShort: "Rủ chơi",
     moreInfo: 'Xem hồ sơ đầy đủ',
     lookingFor: 'Đang tìm bạn chơi',
+    communityPill: "Cộng đồng · tham gia ngay",
     photoVerified: 'Ảnh đã xác minh',
     kmAway: 'Cách {n} km',
     mainSports: 'Môn chính',

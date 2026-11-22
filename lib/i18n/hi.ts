@@ -349,6 +349,7 @@ export const hi: Dictionary = {
     inviteShort: "खेलने बुलाएँ",
     moreInfo: 'पूरी प्रोफ़ाइल खोलें',
     lookingFor: 'साथी ढूँढ रहे हैं',
+    communityPill: "कम्युनिटी · तुरंत जुड़ें",
     photoVerified: 'फ़ोटो सत्यापित',
     kmAway: '{n} किमी दूर',
     mainSports: 'मुख्य खेल',

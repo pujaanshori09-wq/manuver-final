@@ -35,6 +35,93 @@ function bornOnOrBefore(age: number) {
   return new Date(Date.UTC(n.getUTCFullYear() - age, n.getUTCMonth(), n.getUTCDate()));
 }
 
+const CARD = {
+  userId: true,
+  name: true,
+  birthDate: true,
+  gender: true,
+  city: true,
+  bio: true,
+  lookingFor: true,
+  skillLevel: true,
+  job: true,
+  education: true,
+  heightCm: true,
+  workoutStyle: true,
+  preferredTime: true,
+  playFrequency: true,
+  homeVenue: true,
+  availability: true,
+  latitude: true,
+  longitude: true,
+  user: {
+    select: {
+      photos: { orderBy: { position: 'asc' }, select: { storageKey: true } },
+      sports: { orderBy: { createdAt: 'asc' }, select: { sportId: true, experienceLevel: true } },
+      prompts: {
+        orderBy: { position: 'asc' },
+        select: { answer: true, question: { select: { textEn: true, textId: true } } },
+      },
+    },
+  },
+} satisfies Prisma.ProfileSelect;
+
+type CardRow = Prisma.ProfileGetPayload<{ select: typeof CARD }>;
+
+function toCard(p: CardRow, km: number | null, isCommunity = false) {
+  return {
+    isCommunity,
+    id: p.userId,
+    name: p.name,
+    age: ageFrom(p.birthDate),
+    gender: p.gender,
+    city: p.city,
+    // Only a coarse, rounded-up distance ever leaves the server; coordinates never do.
+    distanceKm: km === null ? null : Math.max(1, Math.ceil(km)),
+    bio: p.bio,
+    lookingFor: p.lookingFor,
+    skillLevel: p.skillLevel,
+    job: p.job,
+    education: p.education,
+    heightCm: p.heightCm,
+    workoutStyle: p.workoutStyle,
+    preferredTime: p.preferredTime,
+    playFrequency: p.playFrequency,
+    homeVenue: p.homeVenue,
+    availability: p.availability,
+    photos: p.user.photos.map((ph) => storage.url(ph.storageKey)),
+    sports: p.user.sports,
+    prompts: p.user.prompts.map((pr) => ({
+      question: { en: pr.question.textEn, id: pr.question.textId },
+      answer: pr.answer,
+    })),
+  };
+}
+
+/** Every 5th card is a community account (like an ad); the rest are players. */
+export const COMMUNITY_EVERY = 5;
+
+/**
+ * Lays out one page. `done` = cards already swiped plus cards the app still holds, so the
+ * count lines up with the person's actual swipes. If players run out, one community still shows,
+ * so a new account with few players nearby meets one early.
+ */
+export function interleave<T>(people: T[], communities: T[], done: number, limit: number): T[] {
+  const out: T[] = [];
+  let p = 0;
+  let c = 0;
+  while (out.length < limit) {
+    const slot = done + out.length + 1;
+    if (slot % COMMUNITY_EVERY === 0 && c < communities.length) out.push(communities[c++]!);
+    else if (p < people.length) out.push(people[p++]!);
+    else {
+      if (c === 0 && communities.length) out.push(communities[0]!);
+      break;
+    }
+  }
+  return out;
+}
+
 const WANTED_GENDER = { ALL: undefined, MEN: 'MALE', WOMEN: 'FEMALE' } as const;
 
 async function requireOnboarded(userId: string) {
@@ -92,6 +179,7 @@ export async function discover(userId: string, q: z.infer<typeof DiscoverQuery>)
       onboardingCompletedAt: { not: null },
       ghostMode: false,
       flaggedForReview: false,
+      isCommunity: false,
       birthDate: { lte: bornOnOrBefore(ageMin), gt: bornOnOrBefore(ageMax + 1) },
       ...(wantGender ? { gender: wantGender } : {}),
       AND: and,
@@ -104,39 +192,10 @@ export async function discover(userId: string, q: z.infer<typeof DiscoverQuery>)
     },
     orderBy: { lastActiveAt: 'desc' },
     take: CANDIDATE_POOL,
-    select: {
-      userId: true,
-      name: true,
-      birthDate: true,
-      gender: true,
-      city: true,
-      bio: true,
-      lookingFor: true,
-      skillLevel: true,
-      job: true,
-      education: true,
-      heightCm: true,
-      workoutStyle: true,
-      preferredTime: true,
-      playFrequency: true,
-      homeVenue: true,
-      availability: true,
-      latitude: true,
-      longitude: true,
-      user: {
-        select: {
-          photos: { orderBy: { position: 'asc' }, select: { storageKey: true } },
-          sports: { orderBy: { createdAt: 'asc' }, select: { sportId: true, experienceLevel: true } },
-          prompts: {
-            orderBy: { position: 'asc' },
-            select: { answer: true, question: { select: { textEn: true, textId: true } } },
-          },
-        },
-      },
-    },
+    select: CARD,
   });
 
-  const items = rows
+  const people = rows
     .map((p) => {
       const km =
         here && p.latitude !== null && p.longitude !== null
@@ -147,32 +206,42 @@ export async function discover(userId: string, q: z.infer<typeof DiscoverQuery>)
     .filter(({ km }) => km === null || km <= maxKm)
     .sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity))
     .slice(0, q.limit)
-    .map(({ p, km }) => ({
-      id: p.userId,
-      name: p.name,
-      age: ageFrom(p.birthDate),
-      gender: p.gender,
-      city: p.city,
-      // Only a coarse, rounded-up distance ever leaves the server; coordinates never do.
-      distanceKm: km === null ? null : Math.max(1, Math.ceil(km)),
-      bio: p.bio,
-      lookingFor: p.lookingFor,
-      skillLevel: p.skillLevel,
-      job: p.job,
-      education: p.education,
-      heightCm: p.heightCm,
-      workoutStyle: p.workoutStyle,
-      preferredTime: p.preferredTime,
-      playFrequency: p.playFrequency,
-      homeVenue: p.homeVenue,
-      availability: p.availability,
-      photos: p.user.photos.map((ph) => storage.url(ph.storageKey)),
-      sports: p.user.sports,
-      prompts: p.user.prompts.map((pr) => ({
-        question: { en: pr.question.textEn, id: pr.question.textId },
-        answer: pr.answer,
-      })),
-    }));
+    .map(({ p, km }) => toCard(p, km));
+
+  // Communities skip the age, gender and distance filters; ones sharing my sports come first.
+  const [communityRows, mySports, swiped] = await Promise.all([
+    prisma.profile.findMany({
+      where: {
+        isCommunity: true,
+        userId: { not: userId },
+        onboardingCompletedAt: { not: null },
+        ghostMode: false,
+        flaggedForReview: false,
+        user: {
+          swipesReceived: { none: { userId } },
+          blocksMade: { none: { blockedId: userId } },
+          blocksReceived: { none: { blockerId: userId } },
+        },
+      },
+      orderBy: { lastActiveAt: 'desc' },
+      take: 50,
+      select: CARD,
+    }),
+    prisma.userSport.findMany({ where: { userId }, select: { sportId: true } }),
+    prisma.swipe.count({ where: { userId } }),
+  ]);
+  const liked = new Set(mySports.map((s) => s.sportId));
+  const shared = (p: CardRow) => p.user.sports.filter((s) => liked.has(s.sportId)).length;
+  const communities = communityRows
+    .map((p) => ({ p, n: shared(p) }))
+    .sort((a, b) => b.n - a.n)
+    .map(({ p }) => {
+      const km =
+        here && p.latitude !== null && p.longitude !== null ? haversineKm(here.lat, here.lon, p.latitude, p.longitude) : null;
+      return toCard(p, km, true);
+    });
+
+  const items = interleave(people, communities, swiped + q.ahead, q.limit);
 
   const { premiumUntil } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { premiumUntil: true } });
   return { items, quota: await readQuota(prisma, userId, premiumUntil) };
@@ -187,6 +256,7 @@ export async function swipe(userId: string, targetId: string, action: 'LIKE' | '
     select: {
       name: true,
       onboardingCompletedAt: true,
+      isCommunity: true,
       user: {
         select: {
           photos: { orderBy: { position: 'asc' }, take: 1, select: { storageKey: true } },
@@ -217,8 +287,10 @@ export async function swipe(userId: string, targetId: string, action: 'LIKE' | '
     if (before?.action === action) {
       quota = await readQuota(tx, userId, premiumUntil);
     } else {
-      quota = await checkSwipe(tx, userId, premiumUntil, action);
-      await tx.swipeEvent.create({ data: { userId, action } });
+      // Joining a community is free: it still counts toward the per-minute/hour limits, not the Likes.
+      const counted = target.isCommunity ? 'PASS' : action;
+      quota = await checkSwipe(tx, userId, premiumUntil, counted);
+      await tx.swipeEvent.create({ data: { userId, action: counted } });
       await checkSwipePatterns(tx, userId);
     }
 
@@ -233,7 +305,8 @@ export async function swipe(userId: string, targetId: string, action: 'LIKE' | '
       where: { userId_targetId: { userId: targetId, targetId: userId } },
       select: { action: true },
     });
-    if (!theirs || theirs.action === 'PASS') return { matchId: null, quota, isNewMatch: false };
+    // A community likes everyone back, so a Like there is a match straight away.
+    if (!target.isCommunity && (!theirs || theirs.action === 'PASS')) return { matchId: null, quota, isNewMatch: false };
 
     const existed = await tx.match.findUnique({ where: { userAId_userBId: { userAId, userBId } }, select: { id: true } });
     const match = await tx.match.upsert({

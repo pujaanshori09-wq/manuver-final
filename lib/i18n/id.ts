@@ -349,6 +349,7 @@ export const id: Dictionary = {
     inviteShort: "Ajak Olahraga",
     moreInfo: 'Buka profil lengkap',
     lookingFor: 'Cari partner',
+    communityPill: "Komunitas · langsung gabung",
     photoVerified: 'Foto terverifikasi',
     kmAway: '{n} km dari kamu',
     mainSports: 'Olahraga utama',
