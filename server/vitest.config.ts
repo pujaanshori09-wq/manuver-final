@@ -26,6 +26,9 @@ export default defineConfig({
       DATABASE_URL: testDb,
       // Test uploads go to a throwaway folder, never the real uploads/.
       UPLOAD_DIR: path.join(os.tmpdir(), 'manuver-test-uploads'),
+      // Tests never touch the real photo bucket or send real email, whatever .env says.
+      STORAGE_DRIVER: 'local',
+      RESEND_API_KEY: '',
     },
     testTimeout: 20_000,
   },
